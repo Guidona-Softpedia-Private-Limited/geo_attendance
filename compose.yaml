@@ -1,0 +1,14 @@
+
+
+services:
+  biometric:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "9001:9001"
+    working_dir: /biometric
+    volumes:
+      - .:/biometric
+    restart: unless-stopped
+

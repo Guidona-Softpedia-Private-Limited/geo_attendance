@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>eSSL Probe UI</title>
+
+<!-- Google Font -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+    body {
+        margin: 0;
+        font-family: 'Inter', sans-serif;
+        background: radial-gradient(circle at top, #0f2027, #000);
+        color: #e5e7eb;
+    }
+
+    h1 {
+        text-align: center;
+        font-weight: 600;
+        margin: 30px 0;
+        color: #22d3ee;
+        letter-spacing: 1px;
+    }
+
+    .container {
+        max-width: 1100px;
+        margin: auto;
+        padding: 20px;
+    }
+
+    .card {
+        background: rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(12px);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 0 40px rgba(34, 211, 238, 0.08);
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    h2 {
+        margin-top: 0;
+        font-weight: 500;
+        color: #38bdf8;
+    }
+
+    form {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    label {
+        font-size: 14px;
+        opacity: 0.85;
+    }
+
+    select, button {
+        background: #020617;
+        color: #e5e7eb;
+        border: 1px solid rgba(255,255,255,0.15);
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        outline: none;
+    }
+
+    select:hover, button:hover {
+        border-color: #22d3ee;
+    }
+
+    button {
+        cursor: pointer;
+        background: linear-gradient(135deg, #22d3ee, #3b82f6);
+        color: #020617;
+        font-weight: 600;
+        transition: transform 0.2s ease;
+    }
+
+    button:hover {
+        transform: scale(1.05);
+    }
+
+    .logs {
+        background: #020617;
+        border-radius: 14px;
+        padding: 15px;
+        height: 420px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+    }
+
+    .log-line {
+        color: #22c55e;
+        white-space: pre-wrap;
+    }
+
+    footer {
+        text-align: center;
+        font-size: 12px;
+        opacity: 0.5;
+        margin-top: 25px;
+    }
+</style>
+</head>
+
+<body>
+
+<h1>⚡ eSSL Probe Dashboard</h1>
+
+<div class="container">
+
+    <!-- Manual Command -->
+    <div class="card">
+        <h2>Send Manual Command</h2>
+        <form method="post" action="/send_command">
+            <label>Endpoint</label>
+            <select name="endpoint">
+                {% for ep in endpoints %}
+                <option value="{{ep}}">{{ep}}</option>
+                {% endfor %}
+            </select>
+
+            <label>Command</label>
+            <select name="command">
+                {% for cmd in commands %}
+                <option value="{{cmd}}">{{cmd}}</option>
+                {% endfor %}
+            </select>
+
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <!-- Logs -->
+    <div class="card">
+        <h2>Live Device Logs</h2>
+        <div class="logs" id="logBox">
+            {% for line in logs %}
+            <div class="log-line">{{line}}</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <footer>
+        eSSL / ZKTeco iClock Probe • FastAPI
+    </footer>
+
+</div>
+
+<script>
+    // Auto-scroll logs to bottom
+    const logBox = document.getElementById("logBox");
+    logBox.scrollTop = logBox.scrollHeight;
+</script>
+
+</body>
+</html>
