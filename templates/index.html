@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>eSSL Probe UI</title>
+<title>eSSL Probe UI - ALL Attendance Data</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 
@@ -127,6 +127,11 @@
         color: white;
     }
 
+    .btn-yellow {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: white;
+    }
+
     .logs {
         background: #020617;
         border-radius: 14px;
@@ -239,6 +244,18 @@
         box-shadow: 0 0 10px #10b981;
     }
 
+    .status-fetching {
+        background-color: #f59e0b;
+        box-shadow: 0 0 10px #f59e0b;
+        animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+
     .refresh-controls {
         display: flex;
         gap: 10px;
@@ -317,12 +334,41 @@
     .tab-content.active {
         display: block;
     }
+
+    .fetch-status {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: bold;
+        margin-left: 10px;
+    }
+
+    .fetching {
+        background: rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+        border: 1px solid #f59e0b;
+    }
+
+    .idle {
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+        border: 1px solid #22c55e;
+    }
+
+    .warning-box {
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 15px 0;
+    }
 </style>
 </head>
 
 <body>
 
-<h1>⚡ eSSL Probe Dashboard - ALL Attendance Data</h1>
+<h1>⚡ eSSL Probe Dashboard - Fetch ALL Attendance Data</h1>
 
 <div class="container">
 
@@ -330,11 +376,16 @@
     <div>
         <!-- Device Info -->
         <div class="card">
-            <h2>Device Status & Controls</h2>
+            <h2>Device Status & Controls
+                <span class="fetch-status {{ 'fetching' if fetching_all else 'idle' }}" id="fetchStatus">
+                    {{ 'FETCHING ALL LOGS' if fetching_all else 'IDLE' }}
+                </span>
+            </h2>
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
                 <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
                 <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
+                <div>Unique Users: <strong id="uniqueUsers">{{ unique_users }}</strong></div>
                 <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
                 <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
             </div>
@@ -350,12 +401,28 @@
                     <div class="stat-label">Today</div>
                 </div>
                 <div class="stat-item">
+                    <div class="stat-value" id="uniqueUsersValue">{{ unique_users }}</div>
+                    <div class="stat-label">Unique Users</div>
+                </div>
+                <div class="stat-item">
                     <div class="stat-value" id="queueCount">{{ queue|length }}</div>
                     <div class="stat-label">Queued</div>
                 </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="logsCount">{{ logs|length }}</div>
-                    <div class="stat-label">Logs</div>
+            </div>
+            
+            <!-- Aggressive Fetch Controls -->
+            <div class="warning-box">
+                <strong>⚠️ GET ALL ATTENDANCE LOGS</strong>
+                <p style="margin: 8px 0; font-size: 13px; opacity: 0.9;">
+                    This will send multiple "GET ATTLOG ALL" commands to fetch all existing logs from the device.
+                </p>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <a href="/force_fetch_all">
+                        <button class="btn-small btn-yellow">🚨 FORCE FETCH ALL LOGS</button>
+                    </a>
+                    <a href="/reset_device">
+                        <button class="btn-small btn-blue">Reset Connection</button>
+                    </a>
                 </div>
             </div>
             
@@ -501,16 +568,17 @@
         <!-- Quick Actions -->
         <div class="card">
             <h2>Quick Actions</h2>
-            <!-- Add this form to the Quick Actions section -->
-<form method="post" action="/fetch_historical" style="margin: 0;">
-    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-    <button type="submit" class="btn-small btn-orange">📜 Fetch Historical</button>
-</form>
+            
             <div class="action-buttons">
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="GET ATTLOG ALL">
                     <button type="submit" class="btn-small">📥 Get ALL Attendance</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="FORCE GET ALL LOGS">
+                    <button type="submit" class="btn-small btn-yellow">🚨 Force Fetch ALL</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
@@ -534,11 +602,6 @@
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="CLEAR ATTLOG">
-                    <button type="submit" class="btn-small btn-orange" onclick="return confirm('Clear device attendance?')">🧹 Clear Device</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="GET USERINFO ALL">
                     <button type="submit" class="btn-small">👥 Get Users</button>
                 </form>
@@ -550,12 +613,10 @@
             </div>
             
             <div style="margin-top: 15px; text-align: center;">
-                <a href="/reset_device">
-                    <button class="btn-small btn-blue">Reset Connection</button>
-                </a>
                 <a href="/get_all_attendance" target="_blank">
                     <button class="btn-small btn-green">API View</button>
                 </a>
+                <button class="btn-small btn-blue" onclick="location.reload()">Reload Page</button>
             </div>
         </div>
     </div>
@@ -628,10 +689,24 @@
             document.getElementById('totalRecordsValue').textContent = data.attendance_count;
             document.getElementById('todayRecords').textContent = data.today_count;
             document.getElementById('todayRecordsValue').textContent = data.today_count;
+            document.getElementById('uniqueUsers').textContent = data.unique_users;
+            document.getElementById('uniqueUsersValue').textContent = data.unique_users;
             document.getElementById('queueCount').textContent = data.queue_count;
             document.getElementById('queueCountValue').textContent = data.queue_count;
             document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
             document.getElementById('attendanceCountValue').textContent = data.attendance_count;
+            
+            // Update fetch status
+            const fetchStatus = document.getElementById('fetchStatus');
+            if (fetchStatus) {
+                if (data.fetching_all) {
+                    fetchStatus.className = 'fetch-status fetching';
+                    fetchStatus.textContent = 'FETCHING ALL LOGS';
+                } else {
+                    fetchStatus.className = 'fetch-status idle';
+                    fetchStatus.textContent = 'IDLE';
+                }
+            }
             
             // Update last update time
             const now = new Date();
@@ -841,6 +916,9 @@
                 }
             }
         });
+        
+        // Auto-refresh data every 30 seconds even without checkbox
+        setInterval(refreshData, 30000);
     });
     
     // Manual refresh button
