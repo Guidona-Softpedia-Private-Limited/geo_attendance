@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>eSSL Probe UI</title>
+<title>eSSL Probe UI - ALL Data</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 
@@ -24,7 +24,7 @@
     }
 
     .container {
-        max-width: 1300px;
+        max-width: 1400px;
         margin: auto;
         padding: 20px;
         display: grid;
@@ -42,7 +42,7 @@
         border: 1px solid rgba(255,255,255,0.08);
     }
 
-    h2 {
+    h2, h3 {
         margin-top: 0;
         font-weight: 500;
         color: #38bdf8;
@@ -317,12 +317,63 @@
     .tab-content.active {
         display: block;
     }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+        margin-top: 15px;
+        padding: 10px;
+    }
+
+    .pagination button {
+        padding: 5px 10px;
+        background: rgba(34, 211, 238, 0.2);
+        border: 1px solid rgba(34, 211, 238, 0.3);
+    }
+
+    .pagination-info {
+        font-size: 12px;
+        color: rgba(255,255,255,0.6);
+    }
+
+    .export-buttons {
+        display: flex;
+        gap: 10px;
+        margin: 10px 0;
+    }
+
+    .data-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin: 15px 0;
+    }
+
+    .loading {
+        text-align: center;
+        padding: 20px;
+        color: #22d3ee;
+    }
+
+    .loading:after {
+        content: '...';
+        animation: dots 1.5s steps(4, end) infinite;
+    }
+
+    @keyframes dots {
+        0%, 20% { content: ''; }
+        40% { content: '.'; }
+        60% { content: '..'; }
+        80%, 100% { content: '...'; }
+    }
 </style>
 </head>
 
 <body>
 
-<h1>⚡ eSSL Probe Dashboard - ALL Attendance Data</h1>
+<h1>⚡ eSSL Probe Dashboard - ALL Attendance & Logs</h1>
 
 <div class="container">
 
@@ -336,6 +387,7 @@
                 <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
                 <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
                 <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
+                <div>Total Logs: <strong id="totalLogs">{{ logs_count }}</strong></div>
                 <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
             </div>
             
@@ -350,12 +402,12 @@
                     <div class="stat-label">Today</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-value" id="queueCount">{{ queue|length }}</div>
-                    <div class="stat-label">Queued</div>
+                    <div class="stat-value" id="totalLogsValue">{{ logs_count }}</div>
+                    <div class="stat-label">Logs</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-value" id="logsCount">{{ logs|length }}</div>
-                    <div class="stat-label">Logs</div>
+                    <div class="stat-value" id="queueCount">{{ queue_count }}</div>
+                    <div class="stat-label">Queued</div>
                 </div>
             </div>
             
@@ -385,7 +437,7 @@
             <!-- Command Queue -->
             <div style="margin-top: 20px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3>Command Queue (<span id="queueCountValue">{{ queue|length }}</span>)</h3>
+                    <h3>Command Queue (<span id="queueCountValue">{{ queue_count }}</span>)</h3>
                     <form method="post" action="/clear_queue" style="margin: 0;">
                         <button type="submit" class="btn-small btn-red">Clear Queue</button>
                     </form>
@@ -405,32 +457,63 @@
         <!-- Device Logs -->
         <div class="card">
             <div class="card-header">
-                <h2>Device Communication Logs</h2>
+                <h2>Device Communication Logs (Total: {{ logs_count }})</h2>
                 <div>
                     <form method="post" action="/clear_logs" style="display: inline;">
-                        <button type="submit" class="btn-small btn-red">Clear Logs</button>
+                        <button type="submit" class="btn-small btn-red" onclick="return confirm('Clear ALL logs?')">Clear Logs</button>
                     </form>
                 </div>
             </div>
             
-            <div class="refresh-controls">
-                <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
-                <label style="font-size: 12px;">
-                    <input type="checkbox" id="autoRefresh"> Auto-refresh every 5s
-                </label>
-                <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
-                    <span id="nextRefresh">Auto-refresh off</span>
+            <div class="data-actions">
+                <div class="export-buttons">
+                    <a href="/export_logs?format=csv" target="_blank">
+                        <button class="btn-small btn-green">Export CSV</button>
+                    </a>
+                    <a href="/export_logs?format=json" target="_blank">
+                        <button class="btn-small btn-green">Export JSON</button>
+                    </a>
+                </div>
+                <div class="refresh-controls">
+                    <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
+                    <label style="font-size: 12px;">
+                        <input type="checkbox" id="autoRefresh"> Auto-refresh every 5s
+                    </label>
+                    <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
+                        <span id="nextRefresh">Auto-refresh off</span>
+                    </div>
                 </div>
             </div>
             
-            <div class="logs" id="logBox">
-                {% if logs %}
-                    {% for line in logs %}
-                    <div class="log-line">{{line}}</div>
-                    {% endfor %}
-                {% else %}
-                    <div class="empty-queue">No logs yet</div>
-                {% endif %}
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchLogTab('recentLogsTab')">Recent (200)</button>
+                <button class="tab-button" onclick="switchLogTab('allLogsTab')">All Logs</button>
+            </div>
+            
+            <div id="recentLogsTab" class="tab-content active">
+                <div class="logs" id="logBox" style="height: 380px;">
+                    {% if logs %}
+                        {% for line in logs %}
+                        <div class="log-line">{{line}}</div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-queue">No logs yet</div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div id="allLogsTab" class="tab-content">
+                <div class="logs" id="allLogsBox" style="height: 380px;">
+                    <div class="empty-queue">Click "Load All Logs" button below to load all logs</div>
+                </div>
+                <div class="pagination" id="logsPagination">
+                    <button onclick="prevLogsPage()">← Previous</button>
+                    <span class="pagination-info" id="logsPageInfo">Page 1 of 1</span>
+                    <button onclick="nextLogsPage()">Next →</button>
+                </div>
+                <div style="text-align: center; margin-top: 10px;">
+                    <button class="btn-small btn-blue" onclick="loadAllLogs()">📥 Load All Logs</button>
+                </div>
             </div>
         </div>
     </div>
@@ -440,8 +523,8 @@
         <!-- Attendance Data -->
         <div class="card">
             <div class="card-header">
-                <h2>Attendance Data (<span id="attendanceCountValue">{{ total_records }}</span> total records)</h2>
-                <div>
+                <h2>Attendance Data (Total: {{ total_records }} records)</h2>
+                <div class="export-buttons">
                     <a href="/export_attendance?format=csv" target="_blank">
                         <button class="btn-small btn-green">Export CSV</button>
                     </a>
@@ -462,6 +545,9 @@
                 <div class="time-filter">
                     <input type="date" id="dateFilter" onchange="filterAttendance()">
                     <button class="btn-small" onclick="clearDateFilter()">Clear Date</button>
+                </div>
+                <div style="margin-left: auto; font-size: 12px; opacity: 0.7;">
+                    Showing: <span id="showingCount">100</span> of {{ total_records }}
                 </div>
             </div>
             
@@ -487,7 +573,15 @@
             
             <div id="allTab" class="tab-content">
                 <div class="logs" id="allAttBox" style="height: 380px;">
-                    <div class="empty-queue">Loading all records...</div>
+                    <div class="empty-queue">Click "Load All Records" button below to load all attendance data</div>
+                </div>
+                <div class="pagination" id="attendancePagination">
+                    <button onclick="prevAttendancePage()">← Previous</button>
+                    <span class="pagination-info" id="attendancePageInfo">Page 1 of 1</span>
+                    <button onclick="nextAttendancePage()">Next →</button>
+                </div>
+                <div style="text-align: center; margin-top: 10px;">
+                    <button class="btn-small btn-blue" onclick="loadAllAttendance()">📥 Load All Records</button>
                 </div>
             </div>
             
@@ -551,12 +645,15 @@
                 <a href="/get_all_attendance" target="_blank">
                     <button class="btn-small btn-green">API View</button>
                 </a>
+                <a href="/get_all_logs" target="_blank">
+                    <button class="btn-small btn-green">Logs API</button>
+                </a>
             </div>
         </div>
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage
+        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance & Logs • SQLite Database • Persistent Storage
     </footer>
 
 </div>
@@ -567,28 +664,37 @@
     let refreshCountdown = 5;
     let isAutoRefresh = false;
     let currentTab = 'recentTab';
-    let allAttendanceData = [];
-    let filteredAttendance = [];
+    let currentLogTab = 'recentLogsTab';
+    
+    // Pagination variables
+    let allAttendancePage = 1;
+    let allAttendancePageSize = 1000;
+    let allAttendanceTotalPages = 1;
+    
+    let allLogsPage = 1;
+    let allLogsPageSize = 500;
+    let allLogsTotalPages = 1;
+    
+    // Filter variables
+    let currentUserFilter = '';
+    let currentDateFilter = '';
 
-    // Auto-scroll logs to bottom
-    const logBox = document.getElementById("logBox");
-    const attBox = document.getElementById("attBox");
-    
-    if (logBox) logBox.scrollTop = logBox.scrollHeight;
-    if (attBox) attBox.scrollTop = attBox.scrollHeight;
-    
     // Function to update data via AJAX
     async function refreshData() {
         try {
             const response = await fetch('/get_logs');
             const data = await response.json();
             
-            // Update logs
+            // Update logs in recent tab
             const logBox = document.getElementById('logBox');
             if (logBox && data.logs) {
-                logBox.innerHTML = data.logs.map(line => 
-                    `<div class="log-line">${line}</div>`
-                ).join('');
+                if (data.logs.length > 0) {
+                    logBox.innerHTML = data.logs.map(line => 
+                        `<div class="log-line">${line}</div>`
+                    ).join('');
+                } else {
+                    logBox.innerHTML = '<div class="empty-queue">No logs yet</div>';
+                }
                 logBox.scrollTop = logBox.scrollHeight;
             }
             
@@ -618,28 +724,7 @@
             }
             
             // Update counters
-            document.getElementById('logsCount').textContent = data.logs_count;
-            document.getElementById('totalRecords').textContent = data.attendance_count;
-            document.getElementById('totalRecordsValue').textContent = data.attendance_count;
-            document.getElementById('todayRecords').textContent = data.today_count;
-            document.getElementById('todayRecordsValue').textContent = data.today_count;
-            document.getElementById('queueCount').textContent = data.queue_count;
-            document.getElementById('queueCountValue').textContent = data.queue_count;
-            document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
-            document.getElementById('attendanceCountValue').textContent = data.attendance_count;
-            
-            // Update last update time
-            const now = new Date();
-            const formattedTime = now.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
-            });
-            document.getElementById('lastUpdate').textContent = formattedTime;
+            updateCounters(data);
             
             // Reset countdown if auto-refresh is enabled
             if (isAutoRefresh) {
@@ -651,103 +736,207 @@
         }
     }
     
-    // Function to load all attendance data
-    async function loadAllAttendance() {
-        try {
-            const response = await fetch('/get_all_attendance');
-            const data = await response.json();
-            allAttendanceData = data.data || [];
-            filteredAttendance = [...allAttendanceData];
-            
-            // Display in all tab
-            const allAttBox = document.getElementById('allAttBox');
-            if (allAttBox) {
-                if (allAttendanceData.length > 0) {
-                    allAttBox.innerHTML = allAttendanceData.map(record => 
-                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                    ).join('');
-                    allAttBox.scrollTop = allAttBox.scrollHeight;
-                } else {
-                    allAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data available</div>';
-                }
+    function updateCounters(data) {
+        document.getElementById('totalRecords').textContent = data.attendance_count;
+        document.getElementById('totalRecordsValue').textContent = data.attendance_count;
+        document.getElementById('todayRecords').textContent = data.today_count;
+        document.getElementById('todayRecordsValue').textContent = data.today_count;
+        document.getElementById('totalLogs').textContent = data.logs_count;
+        document.getElementById('totalLogsValue').textContent = data.logs_count;
+        document.getElementById('queueCount').textContent = data.queue_count;
+        document.getElementById('queueCountValue').textContent = data.queue_count;
+        document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
+        
+        // Update showing count
+        const showingCount = document.getElementById('showingCount');
+        if (showingCount) {
+            if (currentTab === 'recentTab') {
+                showingCount.textContent = '100';
+            } else if (currentTab === 'allTab') {
+                showingCount.textContent = allAttendancePageSize;
+            } else if (currentTab === 'todayTab') {
+                showingCount.textContent = data.today_count;
             }
+        }
+    }
+    
+    // Function to load all attendance data with pagination
+    async function loadAllAttendance(page = 1) {
+        try {
+            allAttendancePage = page;
+            const container = document.getElementById('allAttBox');
+            const pagination = document.getElementById('attendancePagination');
+            const pageInfo = document.getElementById('attendancePageInfo');
+            
+            container.innerHTML = '<div class="loading">Loading attendance data</div>';
+            
+            const params = new URLSearchParams({
+                page: allAttendancePage,
+                page_size: allAttendancePageSize
+            });
+            
+            if (currentUserFilter) {
+                params.append('user_id', currentUserFilter);
+            }
+            if (currentDateFilter) {
+                params.append('date_filter', currentDateFilter);
+            }
+            
+            const response = await fetch(`/get_all_attendance?${params}`);
+            const data = await response.json();
+            
+            allAttendanceTotalPages = data.total_pages || 1;
+            
+            if (data.records && data.records.length > 0) {
+                container.innerHTML = data.records.map(record => 
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                ).join('');
+                
+                pageInfo.textContent = `Page ${allAttendancePage} of ${allAttendanceTotalPages}`;
+                pagination.style.display = 'flex';
+                
+                // Update showing count
+                const showingCount = document.getElementById('showingCount');
+                if (showingCount) {
+                    showingCount.textContent = data.records.length;
+                }
+            } else {
+                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data available</div>';
+                pagination.style.display = 'none';
+            }
+            
+            container.scrollTop = 0;
             
         } catch (error) {
             console.error('Error loading all attendance:', error);
+            document.getElementById('allAttBox').innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">Error loading data</div>';
+        }
+    }
+    
+    // Function to load all logs with pagination
+    async function loadAllLogs(page = 1) {
+        try {
+            allLogsPage = page;
+            const container = document.getElementById('allLogsBox');
+            const pagination = document.getElementById('logsPagination');
+            const pageInfo = document.getElementById('logsPageInfo');
+            
+            container.innerHTML = '<div class="loading">Loading logs</div>';
+            
+            const response = await fetch(`/get_all_logs?page=${allLogsPage}&page_size=${allLogsPageSize}`);
+            const data = await response.json();
+            
+            allLogsTotalPages = data.total_pages || 1;
+            
+            if (data.logs && data.logs.length > 0) {
+                container.innerHTML = data.logs.map(line => 
+                    `<div class="log-line">${line}</div>`
+                ).join('');
+                
+                pageInfo.textContent = `Page ${allLogsPage} of ${allLogsTotalPages}`;
+                pagination.style.display = 'flex';
+            } else {
+                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No logs available</div>';
+                pagination.style.display = 'none';
+            }
+            
+            container.scrollTop = 0;
+            
+        } catch (error) {
+            console.error('Error loading all logs:', error);
+            document.getElementById('allLogsBox').innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">Error loading logs</div>';
         }
     }
     
     // Function to load today's attendance
-    function loadTodayAttendance() {
-        const today = new Date().toISOString().split('T')[0];
-        const todayData = allAttendanceData.filter(record => 
-            record.timestamp && record.timestamp.startsWith(today)
-        );
-        
-        const todayAttBox = document.getElementById('todayAttBox');
-        if (todayAttBox) {
-            if (todayData.length > 0) {
-                todayAttBox.innerHTML = todayData.map(record => 
+    async function loadTodayAttendance() {
+        try {
+            const container = document.getElementById('todayAttBox');
+            const today = new Date().toISOString().split('T')[0];
+            
+            container.innerHTML = '<div class="loading">Loading today\'s records</div>';
+            
+            const params = new URLSearchParams({
+                page: 1,
+                page_size: 1000,
+                date_filter: today
+            });
+            
+            const response = await fetch(`/get_all_attendance?${params}`);
+            const data = await response.json();
+            
+            if (data.records && data.records.length > 0) {
+                container.innerHTML = data.records.map(record => 
                     `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
                 ).join('');
-                todayAttBox.scrollTop = todayAttBox.scrollHeight;
+                
+                // Update showing count
+                const showingCount = document.getElementById('showingCount');
+                if (showingCount) {
+                    showingCount.textContent = data.records.length;
+                }
             } else {
-                todayAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
+                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
             }
+            
+        } catch (error) {
+            console.error('Error loading today\'s attendance:', error);
+            container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">Error loading data</div>';
+        }
+    }
+    
+    // Pagination functions
+    function prevAttendancePage() {
+        if (allAttendancePage > 1) {
+            loadAllAttendance(allAttendancePage - 1);
+        }
+    }
+    
+    function nextAttendancePage() {
+        if (allAttendancePage < allAttendanceTotalPages) {
+            loadAllAttendance(allAttendancePage + 1);
+        }
+    }
+    
+    function prevLogsPage() {
+        if (allLogsPage > 1) {
+            loadAllLogs(allLogsPage - 1);
+        }
+    }
+    
+    function nextLogsPage() {
+        if (allLogsPage < allLogsTotalPages) {
+            loadAllLogs(allLogsPage + 1);
         }
     }
     
     // Function to filter attendance
     function filterAttendance() {
-        const searchTerm = document.getElementById('searchUser').value.toLowerCase();
-        const dateFilter = document.getElementById('dateFilter').value;
-        
-        filteredAttendance = allAttendanceData.filter(record => {
-            const matchesSearch = !searchTerm || 
-                record.user_id.toLowerCase().includes(searchTerm) ||
-                record.raw.toLowerCase().includes(searchTerm);
-            
-            const matchesDate = !dateFilter || 
-                (record.timestamp && record.timestamp.startsWith(dateFilter));
-            
-            return matchesSearch && matchesDate;
-        });
-        
-        // Update current tab
-        updateCurrentTab();
-    }
-    
-    // Function to update current tab
-    function updateCurrentTab() {
-        const containerId = currentTab + 'Box';
-        const container = document.getElementById(containerId);
-        
-        if (!container) return;
+        currentUserFilter = document.getElementById('searchUser').value;
+        currentDateFilter = document.getElementById('dateFilter').value;
         
         if (currentTab === 'allTab') {
-            if (filteredAttendance.length > 0) {
-                container.innerHTML = filteredAttendance.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                ).join('');
-            } else {
-                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No matching records found</div>';
-            }
+            loadAllAttendance(1);
+        } else if (currentTab === 'todayTab') {
+            loadTodayAttendance();
         }
     }
     
     // Function to clear search
     function clearSearch() {
         document.getElementById('searchUser').value = '';
+        currentUserFilter = '';
         filterAttendance();
     }
     
     // Function to clear date filter
     function clearDateFilter() {
         document.getElementById('dateFilter').value = '';
+        currentDateFilter = '';
         filterAttendance();
     }
     
-    // Function to switch tabs
+    // Tab switching functions
     function switchTab(tabName) {
         currentTab = tabName;
         
@@ -763,13 +952,37 @@
         });
         document.getElementById(tabName).classList.add('active');
         
-        // Load data for tab if needed
-        if (tabName === 'allTab' && allAttendanceData.length === 0) {
+        // Load data for tab
+        if (tabName === 'allTab') {
             loadAllAttendance();
         } else if (tabName === 'todayTab') {
             loadTodayAttendance();
-        } else if (tabName === 'allTab') {
-            filterAttendance();
+        }
+        
+        // Update showing count
+        refreshData();
+    }
+    
+    function switchLogTab(tabName) {
+        currentLogTab = tabName;
+        
+        // Update tab buttons
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes('switchLogTab')) {
+                btn.classList.remove('active');
+            }
+        });
+        document.querySelector(`[onclick="switchLogTab('${tabName}')"]`).classList.add('active');
+        
+        // Update tab content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(tabName).classList.add('active');
+        
+        // Load data for tab
+        if (tabName === 'allLogsTab') {
+            loadAllLogs();
         }
     }
     
@@ -824,26 +1037,41 @@
     document.addEventListener('DOMContentLoaded', function() {
         initAutoRefresh();
         
-        // Load all attendance data initially
-        loadAllAttendance();
+        // Auto-scroll logs to bottom
+        const logBox = document.getElementById("logBox");
+        const attBox = document.getElementById("attBox");
+        
+        if (logBox) logBox.scrollTop = logBox.scrollHeight;
+        if (attBox) attBox.scrollTop = attBox.scrollHeight;
         
         // Refresh when page becomes visible
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
                 refreshData();
                 if (currentTab === 'allTab') {
-                    loadAllAttendance();
+                    loadAllAttendance(allAttendancePage);
+                }
+                if (currentLogTab === 'allLogsTab') {
+                    loadAllLogs(allLogsPage);
                 }
             }
         });
     });
     
-    // Manual refresh button
+    // Global functions
     window.refreshData = refreshData;
+    window.loadAllAttendance = loadAllAttendance;
+    window.loadAllLogs = loadAllLogs;
+    window.loadTodayAttendance = loadTodayAttendance;
     window.switchTab = switchTab;
+    window.switchLogTab = switchLogTab;
     window.filterAttendance = filterAttendance;
     window.clearSearch = clearSearch;
     window.clearDateFilter = clearDateFilter;
+    window.prevAttendancePage = prevAttendancePage;
+    window.nextAttendancePage = nextAttendancePage;
+    window.prevLogsPage = prevLogsPage;
+    window.nextLogsPage = nextLogsPage;
 </script>
 
 </body>
