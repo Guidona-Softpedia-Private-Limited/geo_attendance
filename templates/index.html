@@ -501,6 +501,11 @@
         <!-- Quick Actions -->
         <div class="card">
             <h2>Quick Actions</h2>
+            <!-- Add this form to the Quick Actions section -->
+<form method="post" action="/fetch_historical" style="margin: 0;">
+    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+    <button type="submit" class="btn-small btn-orange">📜 Fetch Historical</button>
+</form>
             <div class="action-buttons">
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import asyncio
 import json
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import csv
 import io
 
@@ -26,6 +26,8 @@ COMMAND_QUEUE: List[str] = []
 # Device information
 DEVICE_SN = "Unknown"
 DEVICE_INFO: Dict[str, str] = {}
+# Track which devices have been initially connected
+DEVICE_FIRST_CONNECT = set()
 
 # File for persistent storage
 DATA_FILE = "attendance_data.json"
@@ -108,6 +110,7 @@ ENDPOINTS = [
 COMMANDS = [
     "INFO",
     "GET ATTLOG",
+    "GET ATTLOG ALL",  # Added this command
     "SET OPTION RTLOG=1",
     "SET OPTION PUSH=1",
     "CLEAR ATTLOG",
@@ -133,7 +136,7 @@ def log(msg: str):
 def log_attendance_raw(raw_line: str):
     """Log raw attendance line for display"""
     ts = f"{datetime.utcnow().isoformat()}Z - {raw_line}"
-    ATTENDANCE_DISPLAY.append(raw_line)
+    ATTENDANCE_DISPLAY.append(ts)
     # Keep only last 1000 lines in display
     if len(ATTENDANCE_DISPLAY) > 1000:
         ATTENDANCE_DISPLAY.pop(0)
@@ -184,25 +187,30 @@ async def log_request(request: Request, body: str):
         log(f"  BODY     : {body if body else '<empty>'}")
     log("-" * 60)
 
+async def schedule_next_attlog(delay: int = 5):
+    """Schedule next attendance pull"""
+    await asyncio.sleep(delay)
+    if not any("ATTLOG" in cmd for cmd in COMMAND_QUEUE):
+        COMMAND_QUEUE.append("GET ATTLOG")
+        log(f"🔄 Auto-queued next GET ATTLOG in {delay}s")
+
 async def auto_send_commands():
     """Automatically send commands to device periodically"""
     while True:
         try:
             if not COMMAND_QUEUE:
-                # Add initial commands to get all data
-                COMMAND_QUEUE.append("INFO")
-                COMMAND_QUEUE.append("GET OPTION")
-                COMMAND_QUEUE.append("GET ATTLOG ALL")  # Try to get ALL attendance
-                log("🤖 Auto-added initial commands to queue")
+                # Wait a bit on startup to see if device connects
+                await asyncio.sleep(10)
+                
+                # Only add initial commands if no device has connected yet
+                if not DEVICE_SN or DEVICE_SN == "Unknown":
+                    COMMAND_QUEUE.append("INFO")
+                    COMMAND_QUEUE.append("GET OPTION")
+                    COMMAND_QUEUE.append("GET ATTLOG ALL")  # Try to get ALL attendance
+                    log("🤖 Auto-added initial commands to queue")
             
-            # Check if we need to request attendance again
             await asyncio.sleep(30)
             
-            # Always keep GET ATTLOG in queue to get continuous data
-            if not any("ATTLOG" in cmd for cmd in COMMAND_QUEUE):
-                COMMAND_QUEUE.append("GET ATTLOG")
-                log("🔄 Auto-added GET ATTLOG to queue for continuous polling")
-                
         except Exception as e:
             log(f"⚠️ Error in auto_send_commands: {e}")
             await asyncio.sleep(60)
@@ -219,7 +227,7 @@ async def startup_event():
     # Start periodic data saving
     asyncio.create_task(periodic_save())
     
-    log("🚀 eSSL Probe Started - Loading ALL attendance data")
+    log("🚀 eSSL Probe Started - Ready to fetch historical attendance data")
 
 async def periodic_save():
     """Periodically save data to disk"""
@@ -378,6 +386,25 @@ async def get_all_attendance(request: Request):
         "device_info": DEVICE_INFO
     }
 
+@app.post("/fetch_historical")
+async def fetch_historical(request: Request):
+    """Manually trigger fetching of ALL historical data"""
+    global COMMAND_QUEUE
+    
+    # Clear queue and prioritize historical data fetch
+    COMMAND_QUEUE = [
+        "INFO",
+        "GET OPTION",
+        "GET ATTLOG ALL",  # Get ALL attendance logs from device memory
+        "GET USERINFO ALL",
+        "GET ATTLOG"  # Then continue with normal polling
+    ]
+    
+    log("🚨 MANUAL TRIGGER: Requesting ALL historical attendance data from device")
+    log("⚠️ This may take several minutes depending on data size")
+    
+    return PlainTextResponse("OK - Historical data fetch initiated")
+
 # ---------------- DEVICE ENDPOINTS ----------------
 
 @app.api_route("/iclock/cdata.aspx", methods=["GET", "POST"])
@@ -392,6 +419,7 @@ async def iclock_cdata(request: Request):
     if request.method == "POST":
         lines = body.splitlines()
         attendance_count = 0
+        info_count = 0
         
         for line in lines:
             if not line.strip():
@@ -404,36 +432,58 @@ async def iclock_cdata(request: Request):
                 log(f"📱 Device SN: {DEVICE_SN}")
                 save_persistent_data()
             
+            # Parse INFO responses (key=value format)
+            elif '=' in line and not '\t' in line and not line.startswith("GET ") and not line.startswith("SET "):
+                parts = line.split('=', 1)
+                if len(parts) == 2:
+                    key, value = parts
+                    DEVICE_INFO[key.strip()] = value.strip()
+                    info_count += 1
+            
             # Parse attendance data (tab-separated)
             elif '\t' in line and not line.startswith("GET OPTION") and not line.startswith("INFO"):
+                # Skip command echo-back
+                if line.startswith("GET ") or line.startswith("CLEAR ") or line.startswith("SET "):
+                    log(f"📋 Command echo: {line}")
+                    continue
+                    
                 log(f"📥 ATTENDANCE LINE: {line}")
                 log_attendance_raw(line)
                 
                 # Parse and store
                 record = parse_attendance_line(line)
                 if record:
-                    # Check if this is a duplicate
-                    record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
-                    existing = False
-                    for existing_record in ATTENDANCE_DATA:
-                        existing_key = f"{existing_record.get('user_id')}_{existing_record.get('timestamp')}_{existing_record.get('status')}"
-                        if record_key == existing_key:
-                            existing = True
+                    # More robust duplicate checking
+                    is_duplicate = False
+                    for existing_record in ATTENDANCE_DATA[-1000:]:  # Check recent records
+                        if (existing_record.get('user_id') == record['user_id'] and
+                            existing_record.get('timestamp') == record['timestamp'] and
+                            existing_record.get('status') == record['status']):
+                            is_duplicate = True
                             break
                     
-                    if not existing:
+                    if not is_duplicate:
                         ATTENDANCE_DATA.append(record)
                         attendance_count += 1
                         
-                        # Log details
-                        log(f"👤 User: {record['user_id']}, ⏰ Time: {record['timestamp']}, 📊 Status: {record['status_text']}")
+                        # For bulk imports, don't log every single record
+                        if attendance_count <= 10 or attendance_count % 50 == 0:
+                            log(f"👤 User: {record['user_id']}, ⏰ Time: {record['timestamp']}, 📊 Status: {record['status_text']}")
                 
                 else:
                     # If not standard attendance, log it anyway
                     log_attendance_raw(f"RAW: {line}")
         
+        if info_count > 0:
+            log(f"📊 Received {info_count} device info parameters")
+        
         if attendance_count > 0:
             log(f"✅ Added {attendance_count} new attendance records (Total: {len(ATTENDANCE_DATA)})")
+            
+            # If this was a large import, log summary
+            if attendance_count > 50:
+                log(f"🚀 BULK IMPORT: {attendance_count} records received in one batch!")
+            
             save_persistent_data()
         
         return PlainTextResponse("OK")
@@ -446,9 +496,22 @@ async def iclock_getrequest(request: Request):
     # Get query parameters
     sn = request.query_params.get("SN", "Unknown")
     if sn != "Unknown":
-        global DEVICE_SN
+        global DEVICE_SN, DEVICE_FIRST_CONNECT
         DEVICE_SN = sn
         log(f"📱 Device SN from query: {DEVICE_SN}")
+        
+        # Check if this is first connection for this device
+        if sn not in DEVICE_FIRST_CONNECT:
+            log(f"🆕 FIRST CONNECTION FROM DEVICE: {sn}")
+            DEVICE_FIRST_CONNECT.add(sn)
+            
+            # Clear queue and add comprehensive commands for historical data
+            COMMAND_QUEUE.clear()
+            COMMAND_QUEUE.append("INFO")
+            COMMAND_QUEUE.append("GET OPTION")
+            COMMAND_QUEUE.append("GET ATTLOG ALL")  # This is CRITICAL for old data
+            COMMAND_QUEUE.append("GET USERINFO ALL")
+            log("📋 Queued commands for fetching ALL historical data")
     
     await asyncio.sleep(0.5)
     
@@ -456,16 +519,15 @@ async def iclock_getrequest(request: Request):
         command = COMMAND_QUEUE.pop(0)
         log(f"📤 SENDING COMMAND: {command}")
         
-        # Special handling for attendance commands
-        if "ATTLOG" in command:
-            # Schedule next attendance pull
-            async def add_next_attlog():
-                await asyncio.sleep(10)  # Shorter interval for continuous polling
-                if not any("ATTLOG" in cmd for cmd in COMMAND_QUEUE):
-                    COMMAND_QUEUE.append("GET ATTLOG")
-                    log("🔄 Auto-queued next GET ATTLOG for continuous data")
-            
-            asyncio.create_task(add_next_attlog())
+        # Special handling for ATTLOG ALL command
+        if "ATTLOG ALL" in command:
+            log("🚨 REQUESTING ALL HISTORICAL ATTENDANCE DATA")
+            # After requesting all data, also set up for continuous polling
+            asyncio.create_task(schedule_next_attlog(30))  # Wait longer for bulk data
+        
+        # For regular ATTLOG, schedule next one quickly
+        elif "ATTLOG" in command and "ALL" not in command:
+            asyncio.create_task(schedule_next_attlog(5))
         
         return PlainTextResponse(command)
     else:
