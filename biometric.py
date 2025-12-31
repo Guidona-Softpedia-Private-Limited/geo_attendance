@@ -5,7 +5,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from datetime import datetime
 import asyncio
-import json
 
 app = FastAPI()
 
@@ -33,21 +32,21 @@ COMMANDS = [
 ]
 
 LOGS = []
-ATTENDANCE_DATA = []  # Store attendance separately
-COMMAND_QUEUE = []  # Queue for commands to send to device
-DEVICE_SN = "Unknown"  # Store device serial number
+ATTENDANCE_DATA = []
+COMMAND_QUEUE = []
+DEVICE_SN = "Unknown"
 
 def log(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     print(ts)
     LOGS.append(ts)
-    if len(LOGS) > 500:  # Increased buffer
+    if len(LOGS) > 500:
         LOGS.pop(0)
 
 def log_attendance(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     ATTENDANCE_DATA.append(ts)
-    if len(ATTENDANCE_DATA) > 1000:  # Increased buffer
+    if len(ATTENDANCE_DATA) > 1000:
         ATTENDANCE_DATA.pop(0)
 
 async def log_request(request: Request, body: str):
@@ -62,59 +61,50 @@ async def log_request(request: Request, body: str):
         log(f"  BODY     : {body if body else '<empty>'}")
     log("-" * 60)
 
-# ---------------- AUTO COMMAND SENDER ----------------
-
 async def auto_send_commands():
-    """Automatically send commands to device when it connects"""
     while True:
-        # If command queue is empty, add GET ATTLOG to get old data
         if not COMMAND_QUEUE:
             COMMAND_QUEUE.append("INFO")
             COMMAND_QUEUE.append("GET OPTION")
             COMMAND_QUEUE.append("GET ATTLOG")
             log("🤖 Auto-added initial commands to queue")
-        
-        await asyncio.sleep(30)  # Check every 30 seconds instead of 5
+        await asyncio.sleep(30)
 
 @app.on_event("startup")
 async def startup_event():
-    # Start auto command sender in background
     asyncio.create_task(auto_send_commands())
     log("🚀 eSSL Probe Started")
 
-# ---------------- UI HOME ----------------
+# ---------------- UI ROUTES ----------------
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
+    current_time = datetime.utcnow().isoformat() + "Z"
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "logs": LOGS,
-            "attendance": ATTENDANCE_DATA[-100:],  # Show last 100 attendance
+            "logs": LOGS[-50:],
+            "attendance": ATTENDANCE_DATA[-100:],
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,
-            "device_sn": DEVICE_SN
+            "device_sn": DEVICE_SN,
+            "current_time": current_time  # Pass datetime to template
         }
     )
 
-# ---------------- GET LOGS DATA (for AJAX) ----------------
-
 @app.get("/get_logs")
 async def get_logs():
-    """Return logs data for AJAX updates"""
     return {
-        "logs": LOGS[-50:],  # Last 50 logs
-        "attendance": ATTENDANCE_DATA[-30:],  # Last 30 attendance
+        "logs": LOGS[-50:],
+        "attendance": ATTENDANCE_DATA[-30:],
         "queue": COMMAND_QUEUE,
         "queue_count": len(COMMAND_QUEUE),
         "attendance_count": len(ATTENDANCE_DATA),
         "logs_count": len(LOGS),
         "device_sn": DEVICE_SN
     }
-
-# ---------------- SEND MANUAL COMMAND ----------------
 
 @app.post("/send_command", response_class=HTMLResponse)
 async def send_command(
@@ -123,46 +113,55 @@ async def send_command(
     command: str = Form(...)
 ):
     if endpoint == "/iclock/getrequest.aspx":
-        # Add to command queue for device
         COMMAND_QUEUE.append(command)
         log(f"✅ COMMAND QUEUED: {command}")
     else:
         log(f"⚠️  This endpoint ({endpoint}) doesn't support queued commands")
     
+    current_time = datetime.utcnow().isoformat() + "Z"
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "logs": LOGS,
+            "logs": LOGS[-50:],
             "attendance": ATTENDANCE_DATA[-100:],
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,
-            "device_sn": DEVICE_SN
+            "device_sn": DEVICE_SN,
+            "current_time": current_time
         }
     )
-
-# ---------------- CLEAR COMMAND QUEUE ----------------
 
 @app.post("/clear_queue", response_class=HTMLResponse)
 async def clear_queue(request: Request):
     global COMMAND_QUEUE
     COMMAND_QUEUE = []
     log("🗑️ Command queue cleared")
+    current_time = datetime.utcnow().isoformat() + "Z"
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
-            "logs": LOGS,
+            "logs": LOGS[-50:],
             "attendance": ATTENDANCE_DATA[-100:],
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,
-            "device_sn": DEVICE_SN
+            "device_sn": DEVICE_SN,
+            "current_time": current_time
         }
     )
 
-# ---------------- iCLOCK CDATA ----------------
+@app.post("/clear_logs")
+async def clear_logs(request: Request):
+    global LOGS, ATTENDANCE_DATA
+    LOGS = []
+    ATTENDANCE_DATA = []
+    log("🧹 All logs cleared")
+    return PlainTextResponse("OK")
+
+# ---------------- DEVICE ENDPOINTS ----------------
 
 @app.api_route("/iclock/cdata.aspx", methods=["GET", "POST"])
 async def iclock_cdata(request: Request):
@@ -181,18 +180,15 @@ async def iclock_cdata(request: Request):
                 
             if line.startswith("ATTLOG"):
                 log("📥 ATTENDANCE DATA RECEIVED")
-                # Extract SN from ATTLOG line
                 if "SN=" in line:
                     global DEVICE_SN
                     DEVICE_SN = line.split("SN=")[1].strip()
                     log(f"📱 Device SN: {DEVICE_SN}")
                 
             elif "=" in line and not line.startswith("ATTLOG"):
-                # This is attendance data
                 log_attendance(f"ATT → {line}")
                 log(f"👤 {line}")
                 
-                # Parse attendance data
                 parts = line.split("\t")
                 if len(parts) >= 3:
                     user_id = parts[0]
@@ -202,23 +198,17 @@ async def iclock_cdata(request: Request):
         
         return PlainTextResponse("OK")
 
-# ---------------- COMMAND PULL ----------------
-
 @app.get("/iclock/getrequest.aspx")
 async def iclock_getrequest(request: Request):
     log("📡 DEVICE PULLING COMMAND")
     
-    # Wait a bit to ensure device is ready
     await asyncio.sleep(0.5)
     
-    # If queue has commands, send next one
     if COMMAND_QUEUE:
         command = COMMAND_QUEUE.pop(0)
         log(f"📤 SENDING COMMAND: {command}")
         
-        # If we sent GET ATTLOG, add it back after 60 seconds to keep getting data
         if command == "GET ATTLOG":
-            # Schedule to add GET ATTLOG again after 60 seconds
             async def add_attlog_later():
                 await asyncio.sleep(60)
                 if "GET ATTLOG" not in COMMAND_QUEUE:
@@ -229,11 +219,8 @@ async def iclock_getrequest(request: Request):
         
         return PlainTextResponse(command)
     else:
-        # Default: ask for attendance data
         log("📤 SENDING DEFAULT: GET ATTLOG")
         return PlainTextResponse("GET ATTLOG")
-
-# ---------------- OPTIONAL ROUTES ----------------
 
 @app.get("/iclock/registry.aspx")
 async def iclock_registry(request: Request):
@@ -246,11 +233,8 @@ async def iclock_devicecmd(request: Request):
     log(f"📋 DEVICE COMMAND RESPONSE: {body[:200]}")
     return PlainTextResponse("OK")
 
-# ---------------- EXPORT ATTENDANCE ----------------
-
 @app.get("/export_attendance")
 async def export_attendance():
-    """Export all attendance data as text file"""
     if not ATTENDANCE_DATA:
         return PlainTextResponse("No attendance data available")
     
@@ -262,18 +246,6 @@ async def export_attendance():
             "Content-Type": "text/plain"
         }
     )
-
-# ---------------- CLEAR LOGS ----------------
-
-@app.post("/clear_logs")
-async def clear_logs(request: Request):
-    global LOGS, ATTENDANCE_DATA
-    LOGS = []
-    ATTENDANCE_DATA = []
-    log("🧹 All logs cleared")
-    return PlainTextResponse("OK")
-
-# ---------------- FAVICON FIX ----------------
 
 @app.get("/favicon.ico")
 async def favicon():

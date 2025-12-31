@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>eSSL Probe UI</title>
 
-<!-- Google Font -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 
 <style>
@@ -226,10 +225,6 @@
         box-shadow: 0 0 10px #10b981;
     }
 
-    .status-offline {
-        background-color: #ef4444;
-    }
-
     .refresh-controls {
         display: flex;
         gap: 10px;
@@ -255,8 +250,8 @@
             <h2>Device Status</h2>
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
-                <div>Device SN: <strong id="deviceSn">{% if device_sn %}{{device_sn}}{% else %}Not detected yet{% endif %}</strong></div>
-                <div>Last Update: <strong id="lastUpdate">{{datetime.utcnow().isoformat()}}Z</strong></div>
+                <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
+                <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
             </div>
             
             <!-- Manual Command -->
@@ -341,9 +336,13 @@
             </div>
             
             <div class="logs" id="logBox">
-                {% for line in logs %}
-                <div class="log-line">{{line}}</div>
-                {% endfor %}
+                {% if logs %}
+                    {% for line in logs %}
+                    <div class="log-line">{{line}}</div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-queue">No logs yet</div>
+                {% endif %}
             </div>
         </div>
     </div>
