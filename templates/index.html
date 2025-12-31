@@ -70,7 +70,7 @@
         opacity: 0.85;
     }
 
-    select, button {
+    select, button, input {
         background: #020617;
         color: #e5e7eb;
         border: 1px solid rgba(255,255,255,0.15);
@@ -80,7 +80,7 @@
         outline: none;
     }
 
-    select:hover, button:hover {
+    select:hover, button:hover, input:hover {
         border-color: #22d3ee;
     }
 
@@ -114,6 +114,16 @@
 
     .btn-blue {
         background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white;
+    }
+
+    .btn-orange {
+        background: linear-gradient(135deg, #f97316, #ea580c);
+        color: white;
+    }
+
+    .btn-purple {
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
         color: white;
     }
 
@@ -179,35 +189,39 @@
 
     .stats {
         display: flex;
-        gap: 20px;
+        gap: 15px;
         margin-bottom: 15px;
-        padding: 10px;
-        background: rgba(0,0,0,0.2);
-        border-radius: 10px;
+        padding: 15px;
+        background: rgba(0,0,0,0.3);
+        border-radius: 12px;
         flex-wrap: wrap;
     }
 
     .stat-item {
         text-align: center;
         flex: 1;
-        min-width: 80px;
+        min-width: 100px;
+        padding: 10px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 8px;
     }
 
     .stat-value {
-        font-size: 20px;
+        font-size: 24px;
         font-weight: bold;
         color: #22d3ee;
     }
 
     .stat-label {
-        font-size: 11px;
+        font-size: 12px;
         opacity: 0.7;
+        margin-top: 5px;
     }
 
     .device-info {
         background: rgba(34, 211, 238, 0.1);
-        padding: 10px;
-        border-radius: 8px;
+        padding: 15px;
+        border-radius: 10px;
         margin-bottom: 15px;
         border-left: 4px solid #22d3ee;
     }
@@ -234,12 +248,81 @@
         background: rgba(0,0,0,0.2);
         border-radius: 8px;
     }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .search-box {
+        margin: 10px 0;
+        display: flex;
+        gap: 10px;
+    }
+
+    .search-box input {
+        flex: 1;
+    }
+
+    .filter-controls {
+        display: flex;
+        gap: 10px;
+        margin: 10px 0;
+        align-items: center;
+    }
+
+    .time-filter {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .time-filter input {
+        width: 150px;
+    }
+
+    .record-info {
+        font-size: 11px;
+        color: rgba(255,255,255,0.5);
+        margin-left: 10px;
+    }
+
+    .tab-buttons {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+
+    .tab-button {
+        padding: 8px 15px;
+        background: rgba(255,255,255,0.1);
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        color: rgba(255,255,255,0.7);
+    }
+
+    .tab-button.active {
+        background: #22d3ee;
+        color: #020617;
+        font-weight: bold;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
 </style>
 </head>
 
 <body>
 
-<h1>⚡ eSSL Probe Dashboard</h1>
+<h1>⚡ eSSL Probe Dashboard - ALL Attendance Data</h1>
 
 <div class="container">
 
@@ -247,27 +330,38 @@
     <div>
         <!-- Device Info -->
         <div class="card">
-            <h2>Device Status</h2>
+            <h2>Device Status & Controls</h2>
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
                 <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
+                <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
+                <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
                 <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
+            </div>
+            
+            <!-- Statistics -->
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalRecordsValue">{{ total_records }}</div>
+                    <div class="stat-label">Total Records</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="todayRecordsValue">{{ today_records }}</div>
+                    <div class="stat-label">Today</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="queueCount">{{ queue|length }}</div>
+                    <div class="stat-label">Queued</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="logsCount">{{ logs|length }}</div>
+                    <div class="stat-label">Logs</div>
+                </div>
             </div>
             
             <!-- Manual Command -->
             <div class="card-header">
                 <h3>Send Manual Command</h3>
-                <div style="display: flex; gap: 10px;">
-                    <form method="post" action="/clear_queue" style="margin: 0;">
-                        <button type="submit" class="btn-small btn-red">Clear Queue</button>
-                    </form>
-                    <form method="post" action="/clear_logs" style="margin: 0;">
-                        <button type="submit" class="btn-small btn-red">Clear All Logs</button>
-                    </form>
-                    <a href="/export_attendance" target="_blank">
-                        <button class="btn-small btn-green">Export</button>
-                    </a>
-                </div>
             </div>
             
             <form method="post" action="/send_command">
@@ -290,7 +384,12 @@
 
             <!-- Command Queue -->
             <div style="margin-top: 20px;">
-                <h3>Command Queue (<span id="queueCount">{{ queue|length }}</span>)</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>Command Queue (<span id="queueCountValue">{{ queue|length }}</span>)</h3>
+                    <form method="post" action="/clear_queue" style="margin: 0;">
+                        <button type="submit" class="btn-small btn-red">Clear Queue</button>
+                    </form>
+                </div>
                 <div class="command-queue" id="commandQueue">
                     {% if queue %}
                         {% for cmd in queue %}
@@ -305,30 +404,19 @@
 
         <!-- Device Logs -->
         <div class="card">
-            <h2>Device Communication Logs (<span id="logsCount">{{ logs|length }}</span>)</h2>
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="logsCountValue">{{ logs|length }}</div>
-                    <div class="stat-label">Log Entries</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="attendanceCount">{{ attendance|length }}</div>
-                    <div class="stat-label">Attendance</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="queueCountValue">{{ queue|length }}</div>
-                    <div class="stat-label">Queued</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="lastUpdateTime">Now</div>
-                    <div class="stat-label">Last Update</div>
+            <div class="card-header">
+                <h2>Device Communication Logs</h2>
+                <div>
+                    <form method="post" action="/clear_logs" style="display: inline;">
+                        <button type="submit" class="btn-small btn-red">Clear Logs</button>
+                    </form>
                 </div>
             </div>
             
             <div class="refresh-controls">
                 <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
                 <label style="font-size: 12px;">
-                    <input type="checkbox" id="autoRefresh"> Auto-refresh every 10s
+                    <input type="checkbox" id="autoRefresh"> Auto-refresh every 5s
                 </label>
                 <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
                     <span id="nextRefresh">Auto-refresh off</span>
@@ -351,65 +439,137 @@
     <div>
         <!-- Attendance Data -->
         <div class="card">
-            <h2>Attendance Data (<span id="attendanceCountValue">{{ attendance|length }}</span> records)</h2>
-            <div class="logs" id="attBox">
-                {% if attendance %}
-                    {% for line in attendance %}
-                    <div class="att-line">{{line}}</div>
-                    {% endfor %}
-                {% else %}
-                    <div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">
-                        No attendance data received yet
-                    </div>
-                {% endif %}
+            <div class="card-header">
+                <h2>Attendance Data (<span id="attendanceCountValue">{{ total_records }}</span> total records)</h2>
+                <div>
+                    <a href="/export_attendance?format=csv" target="_blank">
+                        <button class="btn-small btn-green">Export CSV</button>
+                    </a>
+                    <a href="/export_attendance?format=json" target="_blank">
+                        <button class="btn-small btn-green">Export JSON</button>
+                    </a>
+                    <form method="post" action="/clear_attendance" style="display: inline;">
+                        <button type="submit" class="btn-small btn-red" onclick="return confirm('Clear ALL attendance data?')">Clear Data</button>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="filter-controls">
+                <div class="search-box">
+                    <input type="text" id="searchUser" placeholder="Search User ID..." oninput="filterAttendance()">
+                    <button class="btn-small" onclick="clearSearch()">Clear</button>
+                </div>
+                <div class="time-filter">
+                    <input type="date" id="dateFilter" onchange="filterAttendance()">
+                    <button class="btn-small" onclick="clearDateFilter()">Clear Date</button>
+                </div>
+            </div>
+            
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchTab('recentTab')">Recent (100)</button>
+                <button class="tab-button" onclick="switchTab('allTab')">All Records</button>
+                <button class="tab-button" onclick="switchTab('todayTab')">Today Only</button>
+            </div>
+            
+            <div id="recentTab" class="tab-content active">
+                <div class="logs" id="attBox" style="height: 380px;">
+                    {% if attendance %}
+                        {% for line in attendance %}
+                        <div class="att-line">{{line}}</div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+                            No attendance data received yet
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div id="allTab" class="tab-content">
+                <div class="logs" id="allAttBox" style="height: 380px;">
+                    <div class="empty-queue">Loading all records...</div>
+                </div>
+            </div>
+            
+            <div id="todayTab" class="tab-content">
+                <div class="logs" id="todayAttBox" style="height: 380px;">
+                    <div class="empty-queue">Loading today's records...</div>
+                </div>
             </div>
         </div>
 
         <!-- Quick Actions -->
         <div class="card">
             <h2>Quick Actions</h2>
-            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+            <div class="action-buttons">
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="GET ATTLOG">
-                    <button type="submit" class="btn-small" style="width: 100%;">📥 Get Attendance</button>
+                    <input type="hidden" name="command" value="GET ATTLOG ALL">
+                    <button type="submit" class="btn-small">📥 Get ALL Attendance</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="INFO">
-                    <button type="submit" class="btn-small" style="width: 100%;">📱 Device Info</button>
+                    <button type="submit" class="btn-small">📱 Device Info</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="GET OPTION">
-                    <button type="submit" class="btn-small" style="width: 100%;">⚙️ Get Options</button>
+                    <button type="submit" class="btn-small">⚙️ Get Options</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="SET OPTION RTLOG=1">
-                    <button type="submit" class="btn-small" style="width: 100%;">⚡ Enable RTLOG</button>
+                    <button type="submit" class="btn-small">⚡ Enable RTLOG</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="SET OPTION PUSH=1">
-                    <button type="submit" class="btn-small" style="width: 100%;">📲 Enable PUSH</button>
+                    <button type="submit" class="btn-small">📲 Enable PUSH</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="CLEAR ATTLOG">
-                    <button type="submit" class="btn-small" style="width: 100%;">🧹 Clear Attendance</button>
+                    <button type="submit" class="btn-small btn-orange" onclick="return confirm('Clear device attendance?')">🧹 Clear Device</button>
                 </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="GET USERINFO ALL">
+                    <button type="submit" class="btn-small">👥 Get Users</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="REBOOT">
+                    <button type="submit" class="btn-small btn-purple" onclick="return confirm('Reboot device?')">🔄 Reboot</button>
+                </form>
+            </div>
+            
+            <div style="margin-top: 15px; text-align: center;">
+                <a href="/reset_device">
+                    <button class="btn-small btn-blue">Reset Connection</button>
+                </a>
+                <a href="/get_all_attendance" target="_blank">
+                    <button class="btn-small btn-green">API View</button>
+                </a>
             </div>
         </div>
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • Manual Refresh Only • No Auto Refresh
+        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage
     </footer>
 
 </div>
 
 <script>
+    // Global variables
+    let refreshInterval;
+    let refreshCountdown = 5;
+    let isAutoRefresh = false;
+    let currentTab = 'recentTab';
+    let allAttendanceData = [];
+    let filteredAttendance = [];
+
     // Auto-scroll logs to bottom
     const logBox = document.getElementById("logBox");
     const attBox = document.getElementById("attBox");
@@ -417,17 +577,13 @@
     if (logBox) logBox.scrollTop = logBox.scrollHeight;
     if (attBox) attBox.scrollTop = attBox.scrollHeight;
     
-    let refreshInterval;
-    let refreshCountdown = 10;
-    let isAutoRefresh = false;
-    
     // Function to update data via AJAX
     async function refreshData() {
         try {
             const response = await fetch('/get_logs');
             const data = await response.json();
             
-            // Update logs - show ALL logs
+            // Update logs
             const logBox = document.getElementById('logBox');
             if (logBox && data.logs) {
                 logBox.innerHTML = data.logs.map(line => 
@@ -436,7 +592,7 @@
                 logBox.scrollTop = logBox.scrollHeight;
             }
             
-            // Update attendance - show ALL attendance
+            // Update attendance in recent tab
             const attBox = document.getElementById('attBox');
             if (attBox && data.attendance) {
                 if (data.attendance.length > 0) {
@@ -463,12 +619,14 @@
             
             // Update counters
             document.getElementById('logsCount').textContent = data.logs_count;
-            document.getElementById('logsCountValue').textContent = data.logs_count;
-            document.getElementById('attendanceCount').textContent = data.attendance_count;
-            document.getElementById('attendanceCountValue').textContent = data.attendance_count;
+            document.getElementById('totalRecords').textContent = data.attendance_count;
+            document.getElementById('totalRecordsValue').textContent = data.attendance_count;
+            document.getElementById('todayRecords').textContent = data.today_count;
+            document.getElementById('todayRecordsValue').textContent = data.today_count;
             document.getElementById('queueCount').textContent = data.queue_count;
             document.getElementById('queueCountValue').textContent = data.queue_count;
             document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
+            document.getElementById('attendanceCountValue').textContent = data.attendance_count;
             
             // Update last update time
             const now = new Date();
@@ -482,15 +640,136 @@
                 hour12: true
             });
             document.getElementById('lastUpdate').textContent = formattedTime;
-            document.getElementById('lastUpdateTime').textContent = 'Now';
             
             // Reset countdown if auto-refresh is enabled
             if (isAutoRefresh) {
-                refreshCountdown = 10;
+                refreshCountdown = 5;
             }
             
         } catch (error) {
             console.error('Error refreshing data:', error);
+        }
+    }
+    
+    // Function to load all attendance data
+    async function loadAllAttendance() {
+        try {
+            const response = await fetch('/get_all_attendance');
+            const data = await response.json();
+            allAttendanceData = data.data || [];
+            filteredAttendance = [...allAttendanceData];
+            
+            // Display in all tab
+            const allAttBox = document.getElementById('allAttBox');
+            if (allAttBox) {
+                if (allAttendanceData.length > 0) {
+                    allAttBox.innerHTML = allAttendanceData.map(record => 
+                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                    ).join('');
+                    allAttBox.scrollTop = allAttBox.scrollHeight;
+                } else {
+                    allAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data available</div>';
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error loading all attendance:', error);
+        }
+    }
+    
+    // Function to load today's attendance
+    function loadTodayAttendance() {
+        const today = new Date().toISOString().split('T')[0];
+        const todayData = allAttendanceData.filter(record => 
+            record.timestamp && record.timestamp.startsWith(today)
+        );
+        
+        const todayAttBox = document.getElementById('todayAttBox');
+        if (todayAttBox) {
+            if (todayData.length > 0) {
+                todayAttBox.innerHTML = todayData.map(record => 
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                ).join('');
+                todayAttBox.scrollTop = todayAttBox.scrollHeight;
+            } else {
+                todayAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
+            }
+        }
+    }
+    
+    // Function to filter attendance
+    function filterAttendance() {
+        const searchTerm = document.getElementById('searchUser').value.toLowerCase();
+        const dateFilter = document.getElementById('dateFilter').value;
+        
+        filteredAttendance = allAttendanceData.filter(record => {
+            const matchesSearch = !searchTerm || 
+                record.user_id.toLowerCase().includes(searchTerm) ||
+                record.raw.toLowerCase().includes(searchTerm);
+            
+            const matchesDate = !dateFilter || 
+                (record.timestamp && record.timestamp.startsWith(dateFilter));
+            
+            return matchesSearch && matchesDate;
+        });
+        
+        // Update current tab
+        updateCurrentTab();
+    }
+    
+    // Function to update current tab
+    function updateCurrentTab() {
+        const containerId = currentTab + 'Box';
+        const container = document.getElementById(containerId);
+        
+        if (!container) return;
+        
+        if (currentTab === 'allTab') {
+            if (filteredAttendance.length > 0) {
+                container.innerHTML = filteredAttendance.map(record => 
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                ).join('');
+            } else {
+                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No matching records found</div>';
+            }
+        }
+    }
+    
+    // Function to clear search
+    function clearSearch() {
+        document.getElementById('searchUser').value = '';
+        filterAttendance();
+    }
+    
+    // Function to clear date filter
+    function clearDateFilter() {
+        document.getElementById('dateFilter').value = '';
+        filterAttendance();
+    }
+    
+    // Function to switch tabs
+    function switchTab(tabName) {
+        currentTab = tabName;
+        
+        // Update tab buttons
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
+        
+        // Update tab content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(tabName).classList.add('active');
+        
+        // Load data for tab if needed
+        if (tabName === 'allTab' && allAttendanceData.length === 0) {
+            loadAllAttendance();
+        } else if (tabName === 'todayTab') {
+            loadTodayAttendance();
+        } else if (tabName === 'allTab') {
+            filterAttendance();
         }
     }
     
@@ -502,7 +781,7 @@
             
             if (refreshCountdown <= 0) {
                 refreshData();
-                refreshCountdown = 10;
+                refreshCountdown = 5;
             }
         }
     }
@@ -530,7 +809,7 @@
             autoRefreshCheckbox.addEventListener('change', function() {
                 isAutoRefresh = this.checked;
                 if (isAutoRefresh) {
-                    refreshCountdown = 10;
+                    refreshCountdown = 5;
                     refreshInterval = setInterval(updateCountdown, 1000);
                     document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
                 } else {
@@ -545,16 +824,26 @@
     document.addEventListener('DOMContentLoaded', function() {
         initAutoRefresh();
         
+        // Load all attendance data initially
+        loadAllAttendance();
+        
         // Refresh when page becomes visible
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
                 refreshData();
+                if (currentTab === 'allTab') {
+                    loadAllAttendance();
+                }
             }
         });
     });
     
     // Manual refresh button
     window.refreshData = refreshData;
+    window.switchTab = switchTab;
+    window.filterAttendance = filterAttendance;
+    window.clearSearch = clearSearch;
+    window.clearDateFilter = clearDateFilter;
 </script>
 
 </body>
