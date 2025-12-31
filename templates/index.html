@@ -427,7 +427,7 @@
             const response = await fetch('/get_logs');
             const data = await response.json();
             
-            // Update logs - show ALL logs, not just last 50
+            // Update logs - show ALL logs
             const logBox = document.getElementById('logBox');
             if (logBox && data.logs) {
                 logBox.innerHTML = data.logs.map(line => 
@@ -436,7 +436,7 @@
                 logBox.scrollTop = logBox.scrollHeight;
             }
             
-            // Update attendance - show ALL attendance, not just last 30
+            // Update attendance - show ALL attendance
             const attBox = document.getElementById('attBox');
             if (attBox && data.attendance) {
                 if (data.attendance.length > 0) {

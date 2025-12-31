@@ -40,16 +40,10 @@ def log(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     print(ts)
     LOGS.append(ts)
-    # Keep all logs (no limit)
-    # if len(LOGS) > 500:
-    #     LOGS.pop(0)
 
 def log_attendance(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     ATTENDANCE_DATA.append(ts)
-    # Keep all attendance data (no limit)
-    # if len(ATTENDANCE_DATA) > 1000:
-    #     ATTENDANCE_DATA.pop(0)
 
 async def log_request(request: Request, body: str):
     log("DEVICE REQUEST")
@@ -86,8 +80,8 @@ async def home(request: Request):
         "index.html",
         {
             "request": request,
-            "logs": LOGS,  # Show ALL logs
-            "attendance": ATTENDANCE_DATA,  # Show ALL attendance
+            "logs": LOGS,
+            "attendance": ATTENDANCE_DATA,
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,
@@ -99,8 +93,8 @@ async def home(request: Request):
 @app.get("/get_logs")
 async def get_logs():
     return {
-        "logs": LOGS,  # Return ALL logs
-        "attendance": ATTENDANCE_DATA,  # Return ALL attendance
+        "logs": LOGS,
+        "attendance": ATTENDANCE_DATA,
         "queue": COMMAND_QUEUE,
         "queue_count": len(COMMAND_QUEUE),
         "attendance_count": len(ATTENDANCE_DATA),
