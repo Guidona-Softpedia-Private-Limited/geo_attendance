@@ -49,7 +49,7 @@ jobs:
 
           cd bio_listner/geo_attendance
           ls
-          git pull origin main
+          git clone https://github.com/Guidona-Softpedia-Private-Limited/geo_attendance.git
           sudo docker compose down 
           sudo docker compose up --build -d
 
