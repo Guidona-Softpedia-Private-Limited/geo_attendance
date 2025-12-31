@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from datetime import datetime
 import asyncio
+import json
 
 app = FastAPI()
 
@@ -34,18 +35,19 @@ COMMANDS = [
 LOGS = []
 ATTENDANCE_DATA = []  # Store attendance separately
 COMMAND_QUEUE = []  # Queue for commands to send to device
+DEVICE_SN = "Unknown"  # Store device serial number
 
 def log(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     print(ts)
     LOGS.append(ts)
-    if len(LOGS) > 200:
+    if len(LOGS) > 500:  # Increased buffer
         LOGS.pop(0)
 
 def log_attendance(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     ATTENDANCE_DATA.append(ts)
-    if len(ATTENDANCE_DATA) > 500:
+    if len(ATTENDANCE_DATA) > 1000:  # Increased buffer
         ATTENDANCE_DATA.pop(0)
 
 async def log_request(request: Request, body: str):
@@ -67,16 +69,18 @@ async def auto_send_commands():
     while True:
         # If command queue is empty, add GET ATTLOG to get old data
         if not COMMAND_QUEUE:
-            COMMAND_QUEUE.append("GET ATTLOG")
             COMMAND_QUEUE.append("INFO")
             COMMAND_QUEUE.append("GET OPTION")
+            COMMAND_QUEUE.append("GET ATTLOG")
+            log("🤖 Auto-added initial commands to queue")
         
-        await asyncio.sleep(5)  # Check every 5 seconds
+        await asyncio.sleep(30)  # Check every 30 seconds instead of 5
 
 @app.on_event("startup")
 async def startup_event():
     # Start auto command sender in background
     asyncio.create_task(auto_send_commands())
+    log("🚀 eSSL Probe Started")
 
 # ---------------- UI HOME ----------------
 
@@ -87,12 +91,28 @@ async def home(request: Request):
         {
             "request": request,
             "logs": LOGS,
-            "attendance": ATTENDANCE_DATA[-50:],  # Show last 50 attendance
+            "attendance": ATTENDANCE_DATA[-100:],  # Show last 100 attendance
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
-            "queue": COMMAND_QUEUE
+            "queue": COMMAND_QUEUE,
+            "device_sn": DEVICE_SN
         }
     )
+
+# ---------------- GET LOGS DATA (for AJAX) ----------------
+
+@app.get("/get_logs")
+async def get_logs():
+    """Return logs data for AJAX updates"""
+    return {
+        "logs": LOGS[-50:],  # Last 50 logs
+        "attendance": ATTENDANCE_DATA[-30:],  # Last 30 attendance
+        "queue": COMMAND_QUEUE,
+        "queue_count": len(COMMAND_QUEUE),
+        "attendance_count": len(ATTENDANCE_DATA),
+        "logs_count": len(LOGS),
+        "device_sn": DEVICE_SN
+    }
 
 # ---------------- SEND MANUAL COMMAND ----------------
 
@@ -114,10 +134,11 @@ async def send_command(
         {
             "request": request,
             "logs": LOGS,
-            "attendance": ATTENDANCE_DATA[-50:],
+            "attendance": ATTENDANCE_DATA[-100:],
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
-            "queue": COMMAND_QUEUE
+            "queue": COMMAND_QUEUE,
+            "device_sn": DEVICE_SN
         }
     )
 
@@ -133,10 +154,11 @@ async def clear_queue(request: Request):
         {
             "request": request,
             "logs": LOGS,
-            "attendance": ATTENDANCE_DATA[-50:],
+            "attendance": ATTENDANCE_DATA[-100:],
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
-            "queue": COMMAND_QUEUE
+            "queue": COMMAND_QUEUE,
+            "device_sn": DEVICE_SN
         }
     )
 
@@ -161,8 +183,9 @@ async def iclock_cdata(request: Request):
                 log("📥 ATTENDANCE DATA RECEIVED")
                 # Extract SN from ATTLOG line
                 if "SN=" in line:
-                    sn = line.split("SN=")[1].strip()
-                    log(f"📱 Device SN: {sn}")
+                    global DEVICE_SN
+                    DEVICE_SN = line.split("SN=")[1].strip()
+                    log(f"📱 Device SN: {DEVICE_SN}")
                 
             elif "=" in line and not line.startswith("ATTLOG"):
                 # This is attendance data
@@ -185,19 +208,22 @@ async def iclock_cdata(request: Request):
 async def iclock_getrequest(request: Request):
     log("📡 DEVICE PULLING COMMAND")
     
+    # Wait a bit to ensure device is ready
+    await asyncio.sleep(0.5)
+    
     # If queue has commands, send next one
     if COMMAND_QUEUE:
         command = COMMAND_QUEUE.pop(0)
         log(f"📤 SENDING COMMAND: {command}")
         
-        # If we sent GET ATTLOG, add it back after 30 seconds to keep getting data
+        # If we sent GET ATTLOG, add it back after 60 seconds to keep getting data
         if command == "GET ATTLOG":
-            # Schedule to add GET ATTLOG again after 30 seconds
+            # Schedule to add GET ATTLOG again after 60 seconds
             async def add_attlog_later():
-                await asyncio.sleep(30)
+                await asyncio.sleep(60)
                 if "GET ATTLOG" not in COMMAND_QUEUE:
                     COMMAND_QUEUE.append("GET ATTLOG")
-                    log("🔄 Auto-added GET ATTLOG to queue")
+                    log("🔄 Auto-added GET ATTLOG to queue (60s interval)")
             
             asyncio.create_task(add_attlog_later())
         
@@ -232,14 +258,23 @@ async def export_attendance():
     return PlainTextResponse(
         content,
         headers={
-            "Content-Disposition": "attachment; filename=attendance_log.txt",
+            "Content-Disposition": f"attachment; filename=attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
             "Content-Type": "text/plain"
         }
     )
+
+# ---------------- CLEAR LOGS ----------------
+
+@app.post("/clear_logs")
+async def clear_logs(request: Request):
+    global LOGS, ATTENDANCE_DATA
+    LOGS = []
+    ATTENDANCE_DATA = []
+    log("🧹 All logs cleared")
+    return PlainTextResponse("OK")
 
 # ---------------- FAVICON FIX ----------------
 
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
-

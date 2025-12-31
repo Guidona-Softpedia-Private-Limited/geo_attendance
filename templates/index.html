@@ -113,6 +113,11 @@
         color: white;
     }
 
+    .btn-blue {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white;
+    }
+
     .logs {
         background: #020617;
         border-radius: 14px;
@@ -180,21 +185,59 @@
         padding: 10px;
         background: rgba(0,0,0,0.2);
         border-radius: 10px;
+        flex-wrap: wrap;
     }
 
     .stat-item {
         text-align: center;
+        flex: 1;
+        min-width: 80px;
     }
 
     .stat-value {
-        font-size: 24px;
+        font-size: 20px;
         font-weight: bold;
         color: #22d3ee;
     }
 
     .stat-label {
-        font-size: 12px;
+        font-size: 11px;
         opacity: 0.7;
+    }
+
+    .device-info {
+        background: rgba(34, 211, 238, 0.1);
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        border-left: 4px solid #22d3ee;
+    }
+
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+
+    .status-online {
+        background-color: #10b981;
+        box-shadow: 0 0 10px #10b981;
+    }
+
+    .status-offline {
+        background-color: #ef4444;
+    }
+
+    .refresh-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 15px;
+        padding: 10px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 8px;
     }
 </style>
 </head>
@@ -207,16 +250,27 @@
 
     <!-- Left Column -->
     <div>
-        <!-- Manual Command -->
+        <!-- Device Info -->
         <div class="card">
+            <h2>Device Status</h2>
+            <div class="device-info">
+                <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
+                <div>Device SN: <strong id="deviceSn">{% if device_sn %}{{device_sn}}{% else %}Not detected yet{% endif %}</strong></div>
+                <div>Last Update: <strong id="lastUpdate">{{datetime.utcnow().isoformat()}}Z</strong></div>
+            </div>
+            
+            <!-- Manual Command -->
             <div class="card-header">
-                <h2>Send Manual Command</h2>
+                <h3>Send Manual Command</h3>
                 <div style="display: flex; gap: 10px;">
                     <form method="post" action="/clear_queue" style="margin: 0;">
                         <button type="submit" class="btn-small btn-red">Clear Queue</button>
                     </form>
+                    <form method="post" action="/clear_logs" style="margin: 0;">
+                        <button type="submit" class="btn-small btn-red">Clear All Logs</button>
+                    </form>
                     <a href="/export_attendance" target="_blank">
-                        <button class="btn-small btn-green">Export Attendance</button>
+                        <button class="btn-small btn-green">Export</button>
                     </a>
                 </div>
             </div>
@@ -241,8 +295,8 @@
 
             <!-- Command Queue -->
             <div style="margin-top: 20px;">
-                <h3>Command Queue ({{ queue|length }})</h3>
-                <div class="command-queue">
+                <h3>Command Queue (<span id="queueCount">{{ queue|length }}</span>)</h3>
+                <div class="command-queue" id="commandQueue">
                     {% if queue %}
                         {% for cmd in queue %}
                         <div class="queue-item">{{ cmd }}</div>
@@ -256,21 +310,36 @@
 
         <!-- Device Logs -->
         <div class="card">
-            <h2>Device Communication Logs</h2>
+            <h2>Device Communication Logs (<span id="logsCount">{{ logs|length }}</span>)</h2>
             <div class="stats">
                 <div class="stat-item">
-                    <div class="stat-value">{{ logs|length }}</div>
+                    <div class="stat-value" id="logsCountValue">{{ logs|length }}</div>
                     <div class="stat-label">Log Entries</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-value">{{ attendance|length }}</div>
+                    <div class="stat-value" id="attendanceCount">{{ attendance|length }}</div>
                     <div class="stat-label">Attendance</div>
                 </div>
                 <div class="stat-item">
-                    <div class="stat-value">{{ queue|length }}</div>
+                    <div class="stat-value" id="queueCountValue">{{ queue|length }}</div>
                     <div class="stat-label">Queued</div>
                 </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="lastUpdateTime">Now</div>
+                    <div class="stat-label">Last Update</div>
+                </div>
             </div>
+            
+            <div class="refresh-controls">
+                <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
+                <label style="font-size: 12px;">
+                    <input type="checkbox" id="autoRefresh" checked> Auto-refresh every 10s
+                </label>
+                <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
+                    <span id="nextRefresh">Next: 10s</span>
+                </div>
+            </div>
+            
             <div class="logs" id="logBox">
                 {% for line in logs %}
                 <div class="log-line">{{line}}</div>
@@ -283,7 +352,7 @@
     <div>
         <!-- Attendance Data -->
         <div class="card">
-            <h2>Attendance Data (Live)</h2>
+            <h2>Attendance Data (<span id="attendanceCountValue">{{ attendance|length }}</span> records)</h2>
             <div class="logs" id="attBox">
                 {% if attendance %}
                     {% for line in attendance %}
@@ -321,12 +390,22 @@
                     <input type="hidden" name="command" value="SET OPTION RTLOG=1">
                     <button type="submit" class="btn-small" style="width: 100%;">⚡ Enable RTLOG</button>
                 </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="SET OPTION PUSH=1">
+                    <button type="submit" class="btn-small" style="width: 100%;">📲 Enable PUSH</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="CLEAR ATTLOG">
+                    <button type="submit" class="btn-small" style="width: 100%;">🧹 Clear Attendance</button>
+                </form>
             </div>
         </div>
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • Auto Attendance Fetch Enabled
+        eSSL / ZKTeco iClock Probe • FastAPI • AJAX Live Updates • No Page Refresh
     </footer>
 
 </div>
@@ -339,19 +418,137 @@
     if (logBox) logBox.scrollTop = logBox.scrollHeight;
     if (attBox) attBox.scrollTop = attBox.scrollHeight;
     
-    // Auto-refresh every 5 seconds
-    setInterval(() => {
-        window.location.reload();
-    }, 5000);
+    let refreshInterval;
+    let refreshCountdown = 10;
+    let isAutoRefresh = true;
+    
+    // Function to update data via AJAX
+    async function refreshData() {
+        try {
+            const response = await fetch('/get_logs');
+            const data = await response.json();
+            
+            // Update logs
+            const logBox = document.getElementById('logBox');
+            if (logBox && data.logs) {
+                logBox.innerHTML = data.logs.map(line => 
+                    `<div class="log-line">${line}</div>`
+                ).join('');
+                logBox.scrollTop = logBox.scrollHeight;
+            }
+            
+            // Update attendance
+            const attBox = document.getElementById('attBox');
+            if (attBox && data.attendance) {
+                if (data.attendance.length > 0) {
+                    attBox.innerHTML = data.attendance.map(line => 
+                        `<div class="att-line">${line}</div>`
+                    ).join('');
+                } else {
+                    attBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data received yet</div>';
+                }
+                attBox.scrollTop = attBox.scrollHeight;
+            }
+            
+            // Update command queue
+            const queueDiv = document.getElementById('commandQueue');
+            if (queueDiv && data.queue) {
+                if (data.queue.length > 0) {
+                    queueDiv.innerHTML = data.queue.map(cmd => 
+                        `<div class="queue-item">${cmd}</div>`
+                    ).join('');
+                } else {
+                    queueDiv.innerHTML = '<div class="empty-queue">No commands in queue</div>';
+                }
+            }
+            
+            // Update counters
+            document.getElementById('logsCount').textContent = data.logs_count;
+            document.getElementById('logsCountValue').textContent = data.logs_count;
+            document.getElementById('attendanceCount').textContent = data.attendance_count;
+            document.getElementById('attendanceCountValue').textContent = data.attendance_count;
+            document.getElementById('queueCount').textContent = data.queue_count;
+            document.getElementById('queueCountValue').textContent = data.queue_count;
+            document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
+            
+            // Update last update time
+            const now = new Date();
+            document.getElementById('lastUpdate').textContent = now.toISOString() + 'Z';
+            document.getElementById('lastUpdateTime').textContent = 'Now';
+            
+            // Reset countdown
+            refreshCountdown = 10;
+            
+        } catch (error) {
+            console.error('Error refreshing data:', error);
+        }
+    }
+    
+    // Function to update countdown
+    function updateCountdown() {
+        if (isAutoRefresh) {
+            refreshCountdown--;
+            document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
+            
+            if (refreshCountdown <= 0) {
+                refreshData();
+                refreshCountdown = 10;
+            }
+        }
+    }
+    
+    // Initialize auto-refresh
+    function initAutoRefresh() {
+        const autoRefreshCheckbox = document.getElementById('autoRefresh');
+        if (autoRefreshCheckbox) {
+            isAutoRefresh = autoRefreshCheckbox.checked;
+            
+            // Clear existing interval
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
+            }
+            
+            // Set up new interval if auto-refresh is enabled
+            if (isAutoRefresh) {
+                refreshInterval = setInterval(updateCountdown, 1000);
+                document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
+            } else {
+                document.getElementById('nextRefresh').textContent = 'Auto-refresh off';
+            }
+            
+            // Add event listener for checkbox
+            autoRefreshCheckbox.addEventListener('change', function() {
+                isAutoRefresh = this.checked;
+                if (isAutoRefresh) {
+                    refreshCountdown = 10;
+                    refreshInterval = setInterval(updateCountdown, 1000);
+                    document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
+                } else {
+                    clearInterval(refreshInterval);
+                    document.getElementById('nextRefresh').textContent = 'Auto-refresh off';
+                }
+            });
+        }
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        initAutoRefresh();
+        
+        // Initial refresh after 2 seconds
+        setTimeout(refreshData, 2000);
+        
+        // Also refresh when page becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                refreshData();
+            }
+        });
+    });
+    
+    // Manual refresh button
+    window.refreshData = refreshData;
 </script>
 
 </body>
 </html>
-
-
-
-
-
-
-
-
