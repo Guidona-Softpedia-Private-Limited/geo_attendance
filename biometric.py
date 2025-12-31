@@ -40,14 +40,16 @@ def log(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     print(ts)
     LOGS.append(ts)
-    if len(LOGS) > 500:
-        LOGS.pop(0)
+    # Keep all logs (no limit)
+    # if len(LOGS) > 500:
+    #     LOGS.pop(0)
 
 def log_attendance(msg: str):
     ts = f"{datetime.utcnow().isoformat()}Z - {msg}"
     ATTENDANCE_DATA.append(ts)
-    if len(ATTENDANCE_DATA) > 1000:
-        ATTENDANCE_DATA.pop(0)
+    # Keep all attendance data (no limit)
+    # if len(ATTENDANCE_DATA) > 1000:
+    #     ATTENDANCE_DATA.pop(0)
 
 async def log_request(request: Request, body: str):
     log("DEVICE REQUEST")
@@ -84,21 +86,21 @@ async def home(request: Request):
         "index.html",
         {
             "request": request,
-            "logs": LOGS[-50:],
-            "attendance": ATTENDANCE_DATA[-100:],
+            "logs": LOGS,  # Show ALL logs
+            "attendance": ATTENDANCE_DATA,  # Show ALL attendance
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,
             "device_sn": DEVICE_SN,
-            "current_time": current_time  # Pass datetime to template
+            "current_time": current_time
         }
     )
 
 @app.get("/get_logs")
 async def get_logs():
     return {
-        "logs": LOGS[-50:],
-        "attendance": ATTENDANCE_DATA[-30:],
+        "logs": LOGS,  # Return ALL logs
+        "attendance": ATTENDANCE_DATA,  # Return ALL attendance
         "queue": COMMAND_QUEUE,
         "queue_count": len(COMMAND_QUEUE),
         "attendance_count": len(ATTENDANCE_DATA),
@@ -123,8 +125,8 @@ async def send_command(
         "index.html",
         {
             "request": request,
-            "logs": LOGS[-50:],
-            "attendance": ATTENDANCE_DATA[-100:],
+            "logs": LOGS,
+            "attendance": ATTENDANCE_DATA,
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,
@@ -143,8 +145,8 @@ async def clear_queue(request: Request):
         "index.html",
         {
             "request": request,
-            "logs": LOGS[-50:],
-            "attendance": ATTENDANCE_DATA[-100:],
+            "logs": LOGS,
+            "attendance": ATTENDANCE_DATA,
             "endpoints": ENDPOINTS,
             "commands": COMMANDS,
             "queue": COMMAND_QUEUE,

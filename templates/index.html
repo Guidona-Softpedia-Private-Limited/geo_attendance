@@ -328,10 +328,10 @@
             <div class="refresh-controls">
                 <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
                 <label style="font-size: 12px;">
-                    <input type="checkbox" id="autoRefresh" checked> Auto-refresh every 10s
+                    <input type="checkbox" id="autoRefresh"> Auto-refresh every 10s
                 </label>
                 <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
-                    <span id="nextRefresh">Next: 10s</span>
+                    <span id="nextRefresh">Auto-refresh off</span>
                 </div>
             </div>
             
@@ -404,7 +404,7 @@
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • AJAX Live Updates • No Page Refresh
+        eSSL / ZKTeco iClock Probe • FastAPI • Manual Refresh Only • No Auto Refresh
     </footer>
 
 </div>
@@ -419,7 +419,7 @@
     
     let refreshInterval;
     let refreshCountdown = 10;
-    let isAutoRefresh = true;
+    let isAutoRefresh = false;
     
     // Function to update data via AJAX
     async function refreshData() {
@@ -427,7 +427,7 @@
             const response = await fetch('/get_logs');
             const data = await response.json();
             
-            // Update logs
+            // Update logs - show ALL logs, not just last 50
             const logBox = document.getElementById('logBox');
             if (logBox && data.logs) {
                 logBox.innerHTML = data.logs.map(line => 
@@ -436,7 +436,7 @@
                 logBox.scrollTop = logBox.scrollHeight;
             }
             
-            // Update attendance
+            // Update attendance - show ALL attendance, not just last 30
             const attBox = document.getElementById('attBox');
             if (attBox && data.attendance) {
                 if (data.attendance.length > 0) {
@@ -472,11 +472,22 @@
             
             // Update last update time
             const now = new Date();
-            document.getElementById('lastUpdate').textContent = now.toISOString() + 'Z';
+            const formattedTime = now.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+            document.getElementById('lastUpdate').textContent = formattedTime;
             document.getElementById('lastUpdateTime').textContent = 'Now';
             
-            // Reset countdown
-            refreshCountdown = 10;
+            // Reset countdown if auto-refresh is enabled
+            if (isAutoRefresh) {
+                refreshCountdown = 10;
+            }
             
         } catch (error) {
             console.error('Error refreshing data:', error);
@@ -534,10 +545,7 @@
     document.addEventListener('DOMContentLoaded', function() {
         initAutoRefresh();
         
-        // Initial refresh after 2 seconds
-        setTimeout(refreshData, 2000);
-        
-        // Also refresh when page becomes visible
+        // Refresh when page becomes visible
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
                 refreshData();
