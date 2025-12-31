@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      image: krishnamishra2004/biometric:latest
+    image: krishnamishra2004/biometric:latest
     ports:
       - "9001:9001"
 
