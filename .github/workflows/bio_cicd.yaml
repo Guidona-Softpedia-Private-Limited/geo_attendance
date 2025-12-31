@@ -48,10 +48,10 @@ jobs:
           ssh -i $SSH_KEY -o StrictHostKeyChecking=no root@69.62.79.61 << 'EOF'
 
           cd bio_listner/geo_attendance
-          ls
           git fetch origin
           git reset --hard origin/main
           git pull origin main
+          ls
           sudo docker compose down 
           sudo docker compose up --build -d
 
