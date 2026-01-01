@@ -363,6 +363,15 @@
         padding: 15px;
         margin: 15px 0;
     }
+    
+    .auto-toggle-info {
+        background: rgba(34, 197, 94, 0.1);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 10px;
+        padding: 10px;
+        margin: 10px 0;
+        font-size: 12px;
+    }
 </style>
 </head>
 
@@ -381,12 +390,26 @@
                     {{ 'FETCHING ALL LOGS' if fetching_all else 'IDLE' }}
                 </span>
             </h2>
+            
+            <!-- Auto Toggle Info -->
+            <div class="auto-toggle-info">
+                <strong>🔄 AUTO-TOGGLE ENABLED:</strong>
+                <div style="margin-top: 5px;">
+                    <span style="color: #f59e0b;">CHECK-IN</span> → <span style="color: #10b981;">CHECK-OUT</span> | 
+                    <span style="color: #10b981;">CHECK-OUT/Unknown</span> → <span style="color: #f59e0b;">CHECK-IN</span>
+                </div>
+                <div style="font-size: 11px; opacity: 0.8; margin-top: 3px;">
+                    Auto-converted: <strong id="autoConverted">{{ auto_converted }}</strong> records
+                </div>
+            </div>
+            
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
                 <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
                 <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
                 <div>Unique Users: <strong id="uniqueUsers">{{ unique_users }}</strong></div>
                 <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
+                <div>Auto-Converted: <strong id="autoConvertedValue">{{ auto_converted }}</strong></div>
                 <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
             </div>
             
@@ -403,6 +426,10 @@
                 <div class="stat-item">
                     <div class="stat-value" id="uniqueUsersValue">{{ unique_users }}</div>
                     <div class="stat-label">Unique Users</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="autoConvertedStat">{{ auto_converted }}</div>
+                    <div class="stat-label">Auto-Converted</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-value" id="queueCount">{{ queue|length }}</div>
@@ -616,13 +643,19 @@
                 <a href="/get_all_attendance" target="_blank">
                     <button class="btn-small btn-green">API View</button>
                 </a>
+                <a href="/stats" target="_blank">
+                    <button class="btn-small btn-blue">Stats</button>
+                </a>
+                <a href="/toggle_mode">
+                    <button class="btn-small btn-orange">Toggle Mode</button>
+                </a>
                 <button class="btn-small btn-blue" onclick="location.reload()">Reload Page</button>
             </div>
         </div>
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage
+        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage • Auto-Toggle: CHECK-IN→CHECK-OUT
     </footer>
 
 </div>
@@ -695,6 +728,9 @@
             document.getElementById('queueCountValue').textContent = data.queue_count;
             document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
             document.getElementById('attendanceCountValue').textContent = data.attendance_count;
+            document.getElementById('autoConverted').textContent = data.auto_converted;
+            document.getElementById('autoConvertedValue').textContent = data.auto_converted;
+            document.getElementById('autoConvertedStat').textContent = data.auto_converted;
             
             // Update fetch status
             const fetchStatus = document.getElementById('fetchStatus');
@@ -743,9 +779,14 @@
             const allAttBox = document.getElementById('allAttBox');
             if (allAttBox) {
                 if (allAttendanceData.length > 0) {
-                    allAttBox.innerHTML = allAttendanceData.map(record => 
-                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                    ).join('');
+                    allAttBox.innerHTML = allAttendanceData.map(record => {
+                        let line = `${record.user_id}\t${record.timestamp}\t${record.status}`;
+                        if (record.auto_converted) {
+                            line += `\t[✔ AUTO: ${record.original_status} → ${record.status}]`;
+                        }
+                        line += `\t${record.verification}\t${record.workcode}`;
+                        return `<div class="att-line">${line}</div>`;
+                    }).join('');
                     allAttBox.scrollTop = allAttBox.scrollHeight;
                 } else {
                     allAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data available</div>';
@@ -767,9 +808,14 @@
         const todayAttBox = document.getElementById('todayAttBox');
         if (todayAttBox) {
             if (todayData.length > 0) {
-                todayAttBox.innerHTML = todayData.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                ).join('');
+                todayAttBox.innerHTML = todayData.map(record => {
+                    let line = `${record.user_id}\t${record.timestamp}\t${record.status}`;
+                    if (record.auto_converted) {
+                        line += `\t[✔ AUTO: ${record.original_status} → ${record.status}]`;
+                    }
+                    line += `\t${record.verification}\t${record.workcode}`;
+                    return `<div class="att-line">${line}</div>`;
+                }).join('');
                 todayAttBox.scrollTop = todayAttBox.scrollHeight;
             } else {
                 todayAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
@@ -806,9 +852,14 @@
         
         if (currentTab === 'allTab') {
             if (filteredAttendance.length > 0) {
-                container.innerHTML = filteredAttendance.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                ).join('');
+                container.innerHTML = filteredAttendance.map(record => {
+                    let line = `${record.user_id}\t${record.timestamp}\t${record.status}`;
+                    if (record.auto_converted) {
+                        line += `\t[✔ AUTO: ${record.original_status} → ${record.status}]`;
+                    }
+                    line += `\t${record.verification}\t${record.workcode}`;
+                    return `<div class="att-line">${line}</div>`;
+                }).join('');
             } else {
                 container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No matching records found</div>';
             }
