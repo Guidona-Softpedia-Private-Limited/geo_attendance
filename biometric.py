@@ -42,12 +42,14 @@ DEVICE_CONVERSION_RULES = {
     "BOCK194560212": {
         "target_status": "CHECK-OUT",
         "status_code": "1",
-        "description": "Convert ALL to CHECK-OUT"
+        "description": "Convert ALL to CHECK-OUT",
+        "color": "#10b981"
     },
     "JJA1245201542": {
         "target_status": "CHECK-IN", 
         "status_code": "0",
-        "description": "Convert ALL to CHECK-IN"
+        "description": "Convert ALL to CHECK-IN",
+        "color": "#f59e0b"
     }
     # Add more devices as needed
 }
@@ -389,6 +391,9 @@ async def home(request: Request):
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
     last_contact = LAST_DEVICE_CONTACT.isoformat() if LAST_DEVICE_CONTACT else "Never"
     
+    # Check if current device has conversion rule
+    current_device_has_rule = DEVICE_SN in DEVICE_CONVERSION_RULES
+    
     return templates.TemplateResponse(
         "index.html",
         {
@@ -409,7 +414,8 @@ async def home(request: Request):
             "last_contact": last_contact,
             "converted": total_converted,
             "converted_by_device": converted_by_device,
-            "device_rules": DEVICE_CONVERSION_RULES
+            "device_rules": DEVICE_CONVERSION_RULES,
+            "current_device_has_rule": current_device_has_rule
         }
     )
 
@@ -820,11 +826,13 @@ async def add_device_rule(sn: str, target_status: str = "CHECK-IN"):
         return {"error": "Target status must be CHECK-IN or CHECK-OUT"}
     
     status_code = "0" if target_status.upper() == "CHECK-IN" else "1"
+    color = "#f59e0b" if target_status.upper() == "CHECK-IN" else "#10b981"
     
     DEVICE_CONVERSION_RULES[sn] = {
         "target_status": target_status.upper(),
         "status_code": status_code,
-        "description": f"Convert ALL to {target_status.upper()}"
+        "description": f"Convert ALL to {target_status.upper()}",
+        "color": color
     }
     
     log(f"✅ Added conversion rule for device {sn}: {target_status.upper()}")

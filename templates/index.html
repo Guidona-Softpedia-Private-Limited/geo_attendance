@@ -393,6 +393,14 @@
         font-size: 10px;
         margin-left: 5px;
     }
+    
+    .checkin-color {
+        color: #f59e0b;
+    }
+    
+    .checkout-color {
+        color: #10b981;
+    }
 </style>
 </head>
 
@@ -418,7 +426,7 @@
                 {% for sn, rule in device_rules.items() %}
                 <div class="rule-item">
                     <span>{{ sn }}</span>
-                    <span style="color: {{ '#f59e0b' if rule.target_status == 'CHECK-IN' else '#10b981' }}">
+                    <span class="{{ 'checkin-color' if rule.target_status == 'CHECK-IN' else 'checkout-color' }}">
                         → {{ rule.target_status }}
                     </span>
                 </div>
@@ -431,7 +439,7 @@
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
                 <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong>
-                    {% if device_sn in device_rules %}
+                    {% if current_device_has_rule %}
                     <span class="device-chip">CONVERTING</span>
                     {% endif %}
                 </div>
