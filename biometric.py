@@ -72,14 +72,14 @@ def auto_toggle_status(user_id: str, original_status: str) -> Dict[str, str]:
     # Apply toggle logic
     if original_std == 'CHECK-IN':
         new_status = 'CHECK-OUT'
-        action = f"Auto-converted CHECK-IN → CHECK-OUT"
+        action = f"CHECK-OUT"
     elif original_std == 'CHECK-OUT':
         new_status = 'CHECK-IN'
-        action = f"Auto-converted CHECK-OUT → CHECK-IN"
+        action = f"CHECK-IN"
     else:
         # All other cases convert to CHECK-IN
         new_status = 'CHECK-IN'
-        action = f"Auto-converted {original_std} → CHECK-IN"
+        action = f"CHECK-IN"
     
     # Update user status tracking
     USER_CHECKIN_STATUS[user_id] = (new_status == 'CHECK-IN')
@@ -348,7 +348,7 @@ async def startup_event():
     asyncio.create_task(periodic_save())
     asyncio.create_task(check_device_status())
     log("🚀 eSSL Probe Started with AUTO-TOGGLE logic")
-    log("ℹ️  Auto-toggle: CHECK-IN → CHECK-OUT, CHECK-OUT/Unknown → CHECK-IN")
+    log("ℹ️  Auto-toggle: CHECK-OUT, CHECK-IN")
 
 async def periodic_save():
     """Periodically save data to disk"""
@@ -769,7 +769,7 @@ async def toggle_auto_toggle():
     """Toggle auto-toggle mode on/off"""
     # This endpoint can be used to enable/disable auto-toggle if needed
     # Currently always enabled based on requirement
-    return PlainTextResponse("Auto-toggle mode is ALWAYS ENABLED: CHECK-IN → CHECK-OUT, CHECK-OUT/Unknown → CHECK-IN")
+    return PlainTextResponse("Auto-toggle mode is ALWAYS ENABLED: CHECK-OUT, CHECK-IN")
 
 @app.get("/favicon.ico")
 async def favicon():
