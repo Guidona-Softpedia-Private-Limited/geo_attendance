@@ -9,9 +9,6 @@ import re
 from typing import List, Dict, Any
 import csv
 import io
-import threading
-import time
-from pathlib import Path
 
 app = FastAPI()
 
@@ -43,11 +40,14 @@ DEVICE_CONNECTED = False
 LAST_DEVICE_CONTACT = None
 DEVICE_SERIAL_NUMBERS: List[str] = []
 
+# Store device-specific data
+DEVICE_DATA: Dict[str, Dict[str, Any]] = {}
+
 # ---------------- PERSISTENT STORAGE FUNCTIONS ----------------
 
 def load_persistent_data():
     """Load previously saved data from files"""
-    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO, DEVICE_SERIAL_NUMBERS
+    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO, DEVICE_SERIAL_NUMBERS, DEVICE_DATA
     
     try:
         # Load attendance data
@@ -58,7 +58,9 @@ def load_persistent_data():
                 DEVICE_SN = data.get('device_sn', "Not detected yet")
                 DEVICE_INFO = data.get('device_info', {})
                 DEVICE_SERIAL_NUMBERS = data.get('device_serials', [])
+                DEVICE_DATA = data.get('device_data', {})
                 print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records from file")
+                print(f"📂 Detected {len(DEVICE_SERIAL_NUMBERS)} device serials: {DEVICE_SERIAL_NUMBERS}")
     except Exception as e:
         print(f"⚠️ Error loading persistent data: {e}")
     
@@ -83,6 +85,7 @@ def save_persistent_data():
             'device_sn': DEVICE_SN,
             'device_info': DEVICE_INFO,
             'device_serials': DEVICE_SERIAL_NUMBERS,
+            'device_data': DEVICE_DATA,
             'last_updated': datetime.utcnow().isoformat()
         }
         with open(DATA_FILE, 'w') as f:
@@ -134,6 +137,9 @@ COMMANDS = [
     "GET ATTLOG ALL",
     "SET OPTION RTLOG=1",
     "SET OPTION PUSH=1",
+    "SET OPTION TRANSTIMES=999",
+    "SET OPTION TRANSTARTS=00:00",
+    "SET OPTION TRANINTERVAL=1",
     "CLEAR ATTLOG",
     "GET OPTION",
     "GET USERINFO",
@@ -150,7 +156,10 @@ COMMANDS = [
     "GET TIME",
     "SET TIME",
     "GET LOG ALL",
-    "GET OPLOG"
+    "GET OPLOG",
+    "GET OPERLOG",
+    "GET FINGER ALL",
+    "GET FACE ALL"
 ]
 
 def extract_device_serial(line: str) -> str:
@@ -270,7 +279,6 @@ def parse_attendance_line(line: str, device_sn: str = None) -> Dict[str, Any]:
 
 async def log_request(request: Request, body: str):
     """Log device request details"""
-    global DEVICE_CONNECTED, LAST_DEVICE_CONTACT, DEVICE_SN
     DEVICE_CONNECTED = True
     LAST_DEVICE_CONTACT = datetime.utcnow()
     
@@ -297,10 +305,7 @@ async def log_request(request: Request, body: str):
 
 async def auto_send_commands():
     """Automatically send commands to device periodically"""
-    global IS_FETCHING_ALL_LOGS, LAST_DEVICE_CONTACT
-    
     first_run = True
-    fetch_attempts = 0
     
     while True:
         try:
@@ -313,10 +318,13 @@ async def auto_send_commands():
                 COMMAND_QUEUE.append("GET OPTION")
                 COMMAND_QUEUE.append("SET OPTION RTLOG=1")
                 COMMAND_QUEUE.append("SET OPTION PUSH=1")
-                COMMAND_QUEUE.append("DATA")  # Alternative command for attendance
+                COMMAND_QUEUE.append("SET OPTION TRANSTIMES=999")
+                COMMAND_QUEUE.append("SET OPTION TRANSTARTS=00:00")
+                COMMAND_QUEUE.append("SET OPTION TRANINTERVAL=1")
+                COMMAND_QUEUE.append("DATA")
                 COMMAND_QUEUE.append("GET ATTLOG ALL")
-                COMMAND_QUEUE.append("GET LOG ALL")  # Get all logs
-                COMMAND_QUEUE.append("GET OPLOG")  # Get operation logs
+                COMMAND_QUEUE.append("GET LOG ALL")
+                COMMAND_QUEUE.append("GET OPLOG")
                 log("🤖 Auto-added initial commands")
                 IS_FETCHING_ALL_LOGS = True
                 first_run = False
@@ -350,7 +358,6 @@ async def periodic_save():
 
 async def check_device_status():
     """Check if device is still connected"""
-    global DEVICE_CONNECTED, LAST_DEVICE_CONTACT
     while True:
         await asyncio.sleep(30)
         if LAST_DEVICE_CONTACT and (datetime.utcnow() - LAST_DEVICE_CONTACT).total_seconds() > 120:
@@ -377,6 +384,16 @@ async def home(request: Request):
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
     last_contact = LAST_DEVICE_CONTACT.strftime('%Y-%m-%d %H:%M:%S') if LAST_DEVICE_CONTACT else "Never"
     
+    # Prepare device-specific data for display
+    device_stats = {}
+    for sn in DEVICE_SERIAL_NUMBERS:
+        device_records = [r for r in ATTENDANCE_DATA if r.get('device_sn') == sn]
+        device_stats[sn] = {
+            'total': len(device_records),
+            'today': len([r for r in device_records if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]),
+            'last_record': max([r.get('timestamp', '') for r in device_records], default='No data')
+        }
+    
     return templates.TemplateResponse(
         "index.html",
         {
@@ -395,7 +412,8 @@ async def home(request: Request):
             "fetching_all": IS_FETCHING_ALL_LOGS,
             "device_connected": DEVICE_CONNECTED,
             "last_contact": last_contact,
-            "device_serials": DEVICE_SERIAL_NUMBERS
+            "device_serials": DEVICE_SERIAL_NUMBERS,
+            "device_stats": device_stats
         }
     )
 
@@ -411,6 +429,16 @@ async def get_logs():
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
     last_contact = LAST_DEVICE_CONTACT.strftime('%Y-%m-%d %H:%M:%S') if LAST_DEVICE_CONTACT else "Never"
     
+    # Device-specific stats
+    device_stats = {}
+    for sn in DEVICE_SERIAL_NUMBERS:
+        device_records = [r for r in ATTENDANCE_DATA if r.get('device_sn') == sn]
+        device_stats[sn] = {
+            'total': len(device_records),
+            'today': len([r for r in device_records if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]),
+            'last_record': max([r.get('timestamp', '') for r in device_records], default='No data')
+        }
+    
     return {
         "logs": LOGS[-200:],
         "attendance": ATTENDANCE_DISPLAY[-100:],
@@ -424,7 +452,9 @@ async def get_logs():
         "device_info": DEVICE_INFO,
         "fetching_all": IS_FETCHING_ALL_LOGS,
         "device_connected": DEVICE_CONNECTED,
-        "last_contact": last_contact
+        "last_contact": last_contact,
+        "device_serials": DEVICE_SERIAL_NUMBERS,
+        "device_stats": device_stats
     }
 
 @app.post("/send_command", response_class=HTMLResponse)
@@ -434,8 +464,6 @@ async def send_command(
     command: str = Form(...)
 ):
     """Send command to device"""
-    global IS_FETCHING_ALL_LOGS
-    
     if endpoint == "/iclock/getrequest.aspx":
         # Handle special commands
         if command == "FORCE GET ALL LOGS":
@@ -445,6 +473,9 @@ async def send_command(
                 "GET OPTION",
                 "SET OPTION RTLOG=1",
                 "SET OPTION PUSH=1",
+                "SET OPTION TRANSTIMES=999",
+                "SET OPTION TRANSTARTS=00:00",
+                "SET OPTION TRANINTERVAL=1",
                 "DATA",
                 "GET ATTLOG ALL",
                 "TRAN DATA",
@@ -466,14 +497,15 @@ async def send_command(
 @app.get("/force_fetch_all")
 async def force_fetch_all():
     """Force fetch all attendance logs from device"""
-    global COMMAND_QUEUE, IS_FETCHING_ALL_LOGS
-    
     COMMAND_QUEUE.clear()
     COMMAND_QUEUE.extend([
         "INFO",
         "GET OPTION",
         "SET OPTION RTLOG=1",
         "SET OPTION PUSH=1",
+        "SET OPTION TRANSTIMES=999",
+        "SET OPTION TRANSTARTS=00:00",
+        "SET OPTION TRANINTERVAL=1",
         "DATA",
         "GET ATTLOG ALL",
         "TRAN DATA",
@@ -486,6 +518,55 @@ async def force_fetch_all():
     
     log("🚨 MANUAL FORCE FETCH: Aggressive commands queued to get ALL attendance and system logs")
     return RedirectResponse(url="/", status_code=303)
+
+@app.get("/trigger_fetch/{device_sn}")
+async def trigger_fetch(device_sn: str):
+    """Manually trigger data fetch for a specific device"""
+    COMMAND_QUEUE.extend([
+        f"INFO",
+        f"GET ATTLOG ALL",
+        f"GET LOG ALL",
+        f"GET OPLOG",
+        f"DATA",
+        f"TRAN DATA"
+    ])
+    
+    IS_FETCHING_ALL_LOGS = True
+    log(f"🚀 Manually triggered data fetch for device: {device_sn}")
+    
+    return {
+        "status": "success",
+        "message": f"Commands queued for device {device_sn}",
+        "queue": COMMAND_QUEUE
+    }
+
+@app.get("/trigger_all")
+async def trigger_all():
+    """Trigger data fetch for all connected devices"""
+    COMMAND_QUEUE.clear()
+    COMMAND_QUEUE.extend([
+        "INFO",
+        "GET OPTION",
+        "SET OPTION RTLOG=1",
+        "SET OPTION PUSH=1",
+        "SET OPTION TRANSTIMES=999",
+        "SET OPTION TRANSTARTS=00:00",
+        "SET OPTION TRANINTERVAL=1",
+        "DATA",
+        "TRAN DATA",
+        "GET ATTLOG ALL",
+        "GET LOG ALL",
+        "GET OPLOG"
+    ])
+    
+    IS_FETCHING_ALL_LOGS = True
+    log("🚀 Manually triggered aggressive data fetch for ALL devices")
+    
+    return {
+        "status": "success",
+        "message": "Aggressive data fetch initiated",
+        "queue": COMMAND_QUEUE
+    }
 
 # ---------------- DEVICE ENDPOINTS ----------------
 
@@ -613,8 +694,6 @@ async def iclock_cdata(request: Request):
 @app.get("/iclock/getrequest.aspx")
 async def iclock_getrequest(request: Request):
     """Device pulls commands from here"""
-    global DEVICE_SN
-    
     # Get query parameters
     sn = request.query_params.get("SN", request.query_params.get("sn", ""))
     if sn:
@@ -716,7 +795,6 @@ async def iclock_devicecmd(request: Request):
 @app.post("/clear_queue")
 async def clear_queue(request: Request):
     """Clear command queue"""
-    global COMMAND_QUEUE
     COMMAND_QUEUE = []
     log("🗑️ Command queue cleared")
     return PlainTextResponse("OK")
@@ -724,7 +802,6 @@ async def clear_queue(request: Request):
 @app.post("/clear_logs")
 async def clear_logs(request: Request):
     """Clear logs (but keep attendance data)"""
-    global LOGS
     LOGS = []
     log("🧹 All logs cleared")
     return PlainTextResponse("OK")
@@ -732,7 +809,6 @@ async def clear_logs(request: Request):
 @app.post("/clear_attendance")
 async def clear_attendance(request: Request):
     """Clear attendance data"""
-    global ATTENDANCE_DATA, ATTENDANCE_DISPLAY
     ATTENDANCE_DATA = []
     ATTENDANCE_DISPLAY = []
     log("🧹 All attendance data cleared")
@@ -802,12 +878,14 @@ async def get_all_attendance(request: Request):
 @app.get("/reset_device")
 async def reset_device():
     """Reset device connection"""
-    global COMMAND_QUEUE, IS_FETCHING_ALL_LOGS
     COMMAND_QUEUE = [
         "INFO", 
         "GET OPTION", 
         "SET OPTION RTLOG=1", 
         "SET OPTION PUSH=1", 
+        "SET OPTION TRANSTIMES=999",
+        "SET OPTION TRANSTARTS=00:00",
+        "SET OPTION TRANINTERVAL=1",
         "DATA", 
         "GET ATTLOG ALL",
         "GET LOG ALL",
@@ -820,3 +898,4 @@ async def reset_device():
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
+
