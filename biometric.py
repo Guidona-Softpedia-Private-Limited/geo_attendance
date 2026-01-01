@@ -35,83 +35,6 @@ IS_FETCHING_ALL_LOGS = False
 DEVICE_CONNECTED = False
 LAST_DEVICE_CONTACT = None
 
-# ---------------- DEVICE-SPECIFIC STATUS CONVERSION LOGIC ----------------
-
-# Define device-specific conversion rules
-DEVICE_CONVERSION_RULES = {
-    "BOCK194560212": {
-        "target_status": "CHECK-OUT",
-        "status_code": "1",
-        "description": "Convert ALL to CHECK-OUT",
-        "color": "#10b981"
-    },
-    "JJA1245201542": {
-        "target_status": "CHECK-IN", 
-        "status_code": "0",
-        "description": "Convert ALL to CHECK-IN",
-        "color": "#f59e0b"
-    }
-    # Add more devices as needed
-}
-
-def convert_status_by_device(device_sn: str, original_status: str) -> Dict[str, str]:
-    """
-    Convert status based on device serial number:
-    - BOCK194560212 → ALL records become CHECK-OUT
-    - JJA1245201542 → ALL records become CHECK-IN
-    - Other devices → Keep original status
-    """
-    original_status = original_status.upper() if original_status else ""
-    
-    # Map ESSL status codes to text
-    status_map = {
-        '0': 'CHECK-IN',
-        '1': 'CHECK-OUT',
-        '2': 'BREAK-OUT',
-        '3': 'BREAK-IN',
-        '4': 'OVERTIME-IN',
-        '5': 'OVERTIME-OUT',
-        '255': 'ERROR',
-        'CHECK-IN': 'CHECK-IN',
-        'CHECKOUT': 'CHECK-OUT',
-        'CHECKOUT': 'CHECK-OUT',
-        'CHECKIN': 'CHECK-IN',
-        'CHECK-IN': 'CHECK-IN',
-        'CHECK-OUT': 'CHECK-OUT',
-        'UNKNOWN': 'UNKNOWN'
-    }
-    
-    # Get standardized original status
-    original_std = status_map.get(original_status, 'UNKNOWN')
-    
-    # Check if this device has conversion rules
-    device_rules = DEVICE_CONVERSION_RULES.get(device_sn)
-    
-    if device_rules:
-        # Apply device-specific conversion
-        new_status = device_rules["target_status"]
-        status_code = device_rules["status_code"]
-        action = f"DEVICE {device_sn}: {device_rules['description']}"
-        
-        return {
-            "new_status": new_status,
-            "original_status": original_std,
-            "action": action,
-            "status_code": status_code,
-            "converted": True,
-            "device_sn": device_sn
-        }
-    else:
-        # No conversion for other devices
-        return {
-            "new_status": original_std,
-            "original_status": original_std,
-            "action": f"No conversion - Device {device_sn}",
-            "status_code": original_status if original_status in ['0', '1', '2', '3', '4', '5', '255'] else '',
-            "converted": False,
-            "device_sn": device_sn
-        }
-
 # ---------------- PERSISTENT STORAGE FUNCTIONS ----------------
 
 def load_persistent_data():
@@ -172,10 +95,7 @@ def update_attendance_display():
     ATTENDANCE_DISPLAY.clear()
     
     for record in ATTENDANCE_DATA[-1000:]:  # Show last 1000 records in UI
-        line = f"{record.get('user_id', 'N/A')}\t{record.get('timestamp', 'N/A')}\t{record.get('status', 'N/A')}"
-        if record.get('converted'):
-            line += f"\t[✓ {record.get('original_status', '')} → {record.get('status', '')}]"
-        line += f"\t{record.get('verification', 'N/A')}\t{record.get('workcode', 'N/A')}"
+        line = f"{record.get('user_id', 'N/A')}\t{record.get('timestamp', 'N/A')}\t{record.get('status', 'N/A')}\t{record.get('verification', 'N/A')}\t{record.get('workcode', 'N/A')}"
         ATTENDANCE_DISPLAY.append(line)
 
 # ---------------- UI SETUP ----------------
@@ -226,59 +146,36 @@ def log_attendance_raw(raw_line: str):
     if len(ATTENDANCE_DISPLAY) > 1000:
         ATTENDANCE_DISPLAY.pop(0)
 
-def parse_attendance_line(line: str, device_sn: str) -> Dict[str, Any]:
+def parse_attendance_line(line: str) -> Dict[str, Any]:
     """
     Parse attendance line in format:
     USER_ID\tTIMESTAMP\tSTATUS\tVERIFICATION\tWORKCODE
-    
-    Apply device-specific conversion based on device_sn
     """
     parts = line.split('\t')
     if len(parts) < 3:
         return {}
     
-    user_id = parts[0]
-    timestamp = parts[1]
-    original_status = parts[2]
-    verification = parts[3] if len(parts) > 3 else ''
-    workcode = parts[4] if len(parts) > 4 else ''
-    
-    # Apply device-specific conversion logic
-    conversion_result = convert_status_by_device(device_sn, original_status)
-    
-    # Create record with conversion information
     record = {
-        'user_id': user_id,
-        'timestamp': timestamp,
-        'status': conversion_result["new_status"],
-        'original_status': conversion_result["original_status"],
-        'status_code': conversion_result["status_code"],
-        'verification': verification,
-        'workcode': workcode,
+        'user_id': parts[0],
+        'timestamp': parts[1],
+        'status': parts[2],
+        'verification': parts[3] if len(parts) > 3 else '',
+        'workcode': parts[4] if len(parts) > 4 else '',
         'received_at': datetime.utcnow().isoformat(),
-        'raw': line,
-        'converted': conversion_result["converted"],
-        'device_sn': device_sn,
-        'conversion_action': conversion_result["action"]
+        'raw': line
     }
     
     # Map status codes to human readable
     status_map = {
-        '0': 'CHECK-IN',
-        '1': 'CHECK-OUT',
-        '2': 'BREAK-OUT',
-        '3': 'BREAK-IN',
-        '4': 'OVERTIME-IN',
-        '5': 'OVERTIME-OUT',
-        '255': 'ERROR'
+        '0': 'Check-in',
+        '1': 'Check-out',
+        '2': 'Break-out',
+        '3': 'Break-in',
+        '4': 'Overtime-in',
+        '5': 'Overtime-out',
+        '255': 'Error'
     }
-    record['status_text'] = status_map.get(record['status_code'], record['status'])
-    
-    # Log the conversion if applied
-    if conversion_result["converted"]:
-        log(f"🔄 {conversion_result['action']} for User {user_id} at {timestamp}")
-    else:
-        log(f"📝 No conversion for device {device_sn} - User {user_id} at {timestamp}: {record['status']}")
+    record['status_text'] = status_map.get(record['status'], 'Unknown')
     
     return record
 
@@ -341,11 +238,7 @@ async def startup_event():
     asyncio.create_task(auto_send_commands())
     asyncio.create_task(periodic_save())
     asyncio.create_task(check_device_status())
-    log("🚀 eSSL Probe Started with Device-Specific Status Conversion")
-    log("ℹ️  Device Rules:")
-    for sn, rules in DEVICE_CONVERSION_RULES.items():
-        log(f"     {sn}: {rules['description']}")
-    log("ℹ️  Other devices: Show original status (no conversion)")
+    log("🚀 eSSL Probe Started")
 
 async def periodic_save():
     """Periodically save data to disk"""
@@ -378,21 +271,9 @@ async def home(request: Request):
     # Get unique users
     unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
     
-    # Count converted records by device
-    converted_by_device = {}
-    for record in ATTENDANCE_DATA:
-        device_sn = record.get('device_sn', 'Unknown')
-        if record.get('converted'):
-            converted_by_device[device_sn] = converted_by_device.get(device_sn, 0) + 1
-    
-    total_converted = sum(converted_by_device.values())
-    
     # Device status
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
     last_contact = LAST_DEVICE_CONTACT.isoformat() if LAST_DEVICE_CONTACT else "Never"
-    
-    # Check if current device has conversion rule
-    current_device_has_rule = DEVICE_SN in DEVICE_CONVERSION_RULES
     
     return templates.TemplateResponse(
         "index.html",
@@ -411,11 +292,7 @@ async def home(request: Request):
             "device_info": DEVICE_INFO,
             "fetching_all": IS_FETCHING_ALL_LOGS,
             "device_connected": DEVICE_CONNECTED,
-            "last_contact": last_contact,
-            "converted": total_converted,
-            "converted_by_device": converted_by_device,
-            "device_rules": DEVICE_CONVERSION_RULES,
-            "current_device_has_rule": current_device_has_rule
+            "last_contact": last_contact
         }
     )
 
@@ -426,9 +303,6 @@ async def get_logs():
     today_records = [r for r in ATTENDANCE_DATA 
                     if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]
     unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
-    
-    # Count converted records
-    total_converted = sum(1 for r in ATTENDANCE_DATA if r.get('converted', False))
     
     # Device status
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
@@ -447,8 +321,7 @@ async def get_logs():
         "device_info": DEVICE_INFO,
         "fetching_all": IS_FETCHING_ALL_LOGS,
         "device_connected": DEVICE_CONNECTED,
-        "last_contact": last_contact,
-        "converted": total_converted
+        "last_contact": last_contact
     }
 
 @app.post("/send_command", response_class=HTMLResponse)
@@ -510,8 +383,6 @@ async def force_fetch_all():
 @app.api_route("/iclock/cdata.aspx", methods=["GET", "POST"])
 async def iclock_cdata(request: Request):
     """Handle ALL device data - this is the MAIN endpoint"""
-    global DEVICE_SN
-    
     body = (await request.body()).decode(errors="ignore")
     await log_request(request, body)
 
@@ -535,17 +406,13 @@ async def iclock_cdata(request: Request):
             # Log raw line for debugging
             log(f"📥 RAW LINE: {line}")
             
-            # Check for device info - try to extract SN if present
+            # Check for device info
             if "SN=" in line.upper():
-                parts = line.split("SN=") if "SN=" in line else line.split("sn=")
-                if len(parts) > 1:
-                    # Extract SN value (could be in format SN=value or SN=value\t...)
-                    sn_value = parts[1].split('\t')[0].split()[0].strip()
-                    if sn_value:
-                        DEVICE_SN = sn_value
-                        log(f"📱 Device SN: {DEVICE_SN}")
-                        DEVICE_INFO['sn'] = DEVICE_SN
-                        save_persistent_data()
+                global DEVICE_SN
+                DEVICE_SN = line.split("SN=")[1].strip() if "SN=" in line else line.split("sn=")[1].strip()
+                log(f"📱 Device SN: {DEVICE_SN}")
+                DEVICE_INFO['sn'] = DEVICE_SN
+                save_persistent_data()
             
             # Try to parse as attendance (tab-separated)
             elif '\t' in line:
@@ -554,8 +421,8 @@ async def iclock_cdata(request: Request):
                 
                 # Check if this looks like attendance data
                 if len(parts) >= 2:
-                    # Parse with device-specific conversion logic
-                    record = parse_attendance_line(line, DEVICE_SN)
+                    # Try different parsing strategies
+                    record = parse_attendance_line(line)
                     if record:
                         # Check for duplicate
                         record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
@@ -567,19 +434,8 @@ async def iclock_cdata(request: Request):
                         if not existing:
                             ATTENDANCE_DATA.append(record)
                             attendance_count += 1
-                            
-                            # Create display line with conversion indicator
-                            display_line = f"{record['user_id']}\t{record['timestamp']}\t{record['status']}"
-                            if record.get('converted'):
-                                display_line += f"\t[✓ {record.get('original_status', '')} → {record['status']}]"
-                            display_line += f"\t{record.get('verification', '')}\t{record.get('workcode', '')}"
-                            
-                            log_attendance_raw(display_line)
-                            log(f"✅ Attendance: User {record['user_id']} at {record['timestamp']} ({record['status']})")
-                            
-                            # If converted, log the action
-                            if record.get('converted'):
-                                log(f"   ↳ {record.get('conversion_action', 'Converted')}")
+                            log_attendance_raw(line)
+                            log(f"✅ Attendance: User {record['user_id']} at {record['timestamp']}")
                         else:
                             log(f"⚠️ Duplicate attendance skipped")
                     else:
@@ -719,7 +575,7 @@ async def export_attendance(format: str = "csv"):
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Original Status", "Verification", "Workcode", "Device SN", "Converted", "Received At"])
+        writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Verification", "Workcode", "Received At"])
         
         for record in ATTENDANCE_DATA:
             writer.writerow([
@@ -727,11 +583,8 @@ async def export_attendance(format: str = "csv"):
                 record.get('timestamp', ''),
                 record.get('status', ''),
                 record.get('status_text', ''),
-                record.get('original_status', ''),
                 record.get('verification', ''),
                 record.get('workcode', ''),
-                record.get('device_sn', ''),
-                "Yes" if record.get('converted') else "No",
                 record.get('received_at', '')
             ])
         
@@ -767,9 +620,7 @@ async def get_all_attendance(request: Request):
         "device_sn": DEVICE_SN,
         "device_info": DEVICE_INFO,
         "fetching_all": IS_FETCHING_ALL_LOGS,
-        "device_connected": DEVICE_CONNECTED,
-        "converted_count": sum(1 for r in ATTENDANCE_DATA if r.get('converted', False)),
-        "device_rules": DEVICE_CONVERSION_RULES
+        "device_connected": DEVICE_CONNECTED
     }
 
 @app.get("/reset_device")
@@ -784,66 +635,3 @@ async def reset_device():
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
-
-@app.get("/stats")
-async def get_stats():
-    """Get statistics"""
-    today = datetime.utcnow().date()
-    today_records = [r for r in ATTENDANCE_DATA 
-                    if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]
-    
-    converted = sum(1 for r in ATTENDANCE_DATA if r.get('converted', False))
-    
-    # Count by device
-    records_by_device = {}
-    converted_by_device = {}
-    
-    for record in ATTENDANCE_DATA:
-        device_sn = record.get('device_sn', 'Unknown')
-        records_by_device[device_sn] = records_by_device.get(device_sn, 0) + 1
-        
-        if record.get('converted'):
-            converted_by_device[device_sn] = converted_by_device.get(device_sn, 0) + 1
-    
-    return {
-        "total_records": len(ATTENDANCE_DATA),
-        "today_records": len(today_records),
-        "unique_users": len(set(r.get('user_id', '') for r in ATTENDANCE_DATA)),
-        "converted": converted,
-        "records_by_device": records_by_device,
-        "converted_by_device": converted_by_device,
-        "device_rules": DEVICE_CONVERSION_RULES,
-        "last_update": max((r.get('received_at', '') for r in ATTENDANCE_DATA), default='Never')
-    }
-
-@app.get("/add_device_rule")
-async def add_device_rule(sn: str, target_status: str = "CHECK-IN"):
-    """Add a new device conversion rule"""
-    if not sn:
-        return {"error": "Device SN is required"}
-    
-    if target_status.upper() not in ["CHECK-IN", "CHECK-OUT"]:
-        return {"error": "Target status must be CHECK-IN or CHECK-OUT"}
-    
-    status_code = "0" if target_status.upper() == "CHECK-IN" else "1"
-    color = "#f59e0b" if target_status.upper() == "CHECK-IN" else "#10b981"
-    
-    DEVICE_CONVERSION_RULES[sn] = {
-        "target_status": target_status.upper(),
-        "status_code": status_code,
-        "description": f"Convert ALL to {target_status.upper()}",
-        "color": color
-    }
-    
-    log(f"✅ Added conversion rule for device {sn}: {target_status.upper()}")
-    return {"success": True, "rules": DEVICE_CONVERSION_RULES}
-
-@app.get("/remove_device_rule")
-async def remove_device_rule(sn: str):
-    """Remove a device conversion rule"""
-    if sn in DEVICE_CONVERSION_RULES:
-        del DEVICE_CONVERSION_RULES[sn]
-        log(f"✅ Removed conversion rule for device {sn}")
-        return {"success": True, "rules": DEVICE_CONVERSION_RULES}
-    else:
-        return {"error": f"No rule found for device {sn}"}
