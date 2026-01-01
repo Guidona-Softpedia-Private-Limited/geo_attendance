@@ -11,6 +11,7 @@ import csv
 import io
 import threading
 import time
+from pathlib import Path
 
 app = FastAPI()
 
@@ -29,8 +30,12 @@ DEVICE_SN = "Not detected yet"
 DEVICE_INFO: Dict[str, str] = {}
 
 # File for persistent storage
-DATA_FILE = "attendance_data.json"
-LOG_FILE = "device_logs.txt"
+DATA_DIR = "data"
+DATA_FILE = os.path.join(DATA_DIR, "attendance_data.json")
+LOG_FILE = os.path.join(DATA_DIR, "device_logs.txt")
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Track device connection
 IS_FETCHING_ALL_LOGS = False
@@ -514,7 +519,6 @@ async def iclock_cdata(request: Request):
             # Try to extract device serial number from ANY line
             serial = extract_device_serial(line)
             if serial and serial != DEVICE_SN:
-                global DEVICE_SN
                 DEVICE_SN = serial
                 if serial not in DEVICE_SERIAL_NUMBERS:
                     DEVICE_SERIAL_NUMBERS.append(serial)
@@ -656,7 +660,6 @@ async def iclock_registry(request: Request):
     
     for key, value in request.query_params.items():
         if key.upper() == "SN":
-            global DEVICE_SN
             DEVICE_SN = value
             if value not in DEVICE_SERIAL_NUMBERS:
                 DEVICE_SERIAL_NUMBERS.append(value)
@@ -689,7 +692,6 @@ async def iclock_devicecmd(request: Request):
             # Extract device serial number from response
             serial = extract_device_serial(line)
             if serial:
-                global DEVICE_SN
                 DEVICE_SN = serial
                 if serial not in DEVICE_SERIAL_NUMBERS:
                     DEVICE_SERIAL_NUMBERS.append(serial)
@@ -818,4 +820,3 @@ async def reset_device():
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
-
