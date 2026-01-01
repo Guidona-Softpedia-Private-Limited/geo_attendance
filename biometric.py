@@ -9,6 +9,8 @@ import re
 from typing import List, Dict, Any
 import csv
 import io
+import threading
+import time
 
 app = FastAPI()
 
@@ -23,7 +25,7 @@ ATTENDANCE_DISPLAY: List[str] = []
 # Command queue
 COMMAND_QUEUE: List[str] = []
 # Device information
-DEVICE_SN = "Unknown"
+DEVICE_SN = "Not detected yet"
 DEVICE_INFO: Dict[str, str] = {}
 
 # File for persistent storage
@@ -34,12 +36,13 @@ LOG_FILE = "device_logs.txt"
 IS_FETCHING_ALL_LOGS = False
 DEVICE_CONNECTED = False
 LAST_DEVICE_CONTACT = None
+DEVICE_SERIAL_NUMBERS: List[str] = []
 
 # ---------------- PERSISTENT STORAGE FUNCTIONS ----------------
 
 def load_persistent_data():
     """Load previously saved data from files"""
-    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO
+    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO, DEVICE_SERIAL_NUMBERS
     
     try:
         # Load attendance data
@@ -47,8 +50,9 @@ def load_persistent_data():
             with open(DATA_FILE, 'r') as f:
                 data = json.load(f)
                 ATTENDANCE_DATA = data.get('attendance', [])
-                DEVICE_SN = data.get('device_sn', "Unknown")
+                DEVICE_SN = data.get('device_sn', "Not detected yet")
                 DEVICE_INFO = data.get('device_info', {})
+                DEVICE_SERIAL_NUMBERS = data.get('device_serials', [])
                 print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records from file")
     except Exception as e:
         print(f"⚠️ Error loading persistent data: {e}")
@@ -73,6 +77,7 @@ def save_persistent_data():
             'attendance': ATTENDANCE_DATA,
             'device_sn': DEVICE_SN,
             'device_info': DEVICE_INFO,
+            'device_serials': DEVICE_SERIAL_NUMBERS,
             'last_updated': datetime.utcnow().isoformat()
         }
         with open(DATA_FILE, 'w') as f:
@@ -95,7 +100,16 @@ def update_attendance_display():
     ATTENDANCE_DISPLAY.clear()
     
     for record in ATTENDANCE_DATA[-1000:]:  # Show last 1000 records in UI
-        line = f"{record.get('user_id', 'N/A')}\t{record.get('timestamp', 'N/A')}\t{record.get('status', 'N/A')}\t{record.get('verification', 'N/A')}\t{record.get('workcode', 'N/A')}"
+        # Format for display: tab-separated with all fields
+        user_id = record.get('user_id', 'N/A')
+        timestamp = record.get('timestamp', 'N/A')
+        status = record.get('status', '0')
+        verification = record.get('verification', '0')
+        workcode = record.get('workcode', '0')
+        device_sn = record.get('device_sn', DEVICE_SN)
+        
+        # Format like: USER_ID TIMESTAMP STATUS VERIFICATION WORKCODE DEVICE_SN
+        line = f"{user_id}\t{timestamp}\t{status}\t{verification}\t{workcode}\t{device_sn}"
         ATTENDANCE_DISPLAY.append(line)
 
 # ---------------- UI SETUP ----------------
@@ -127,8 +141,47 @@ COMMANDS = [
     "DATA",
     "TRAN DATA",
     "GET FP INFO",
-    "GET PHOTO INFO"
+    "GET PHOTO INFO",
+    "GET TIME",
+    "SET TIME",
+    "GET LOG ALL",
+    "GET OPLOG"
 ]
+
+def extract_device_serial(line: str) -> str:
+    """Extract device serial number from various formats"""
+    patterns = [
+        r'SN=([A-Z0-9]{10,})',
+        r'sn=([A-Z0-9]{10,})',
+        r'SerialNumber=([A-Z0-9]{10,})',
+        r'DEVICEID=([A-Z0-9]{10,})',
+        r'DeviceID=([A-Z0-9]{10,})',
+        r'~(\d{10,})',
+        r'~([A-Z0-9]{10,})'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, line, re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+    
+    return None
+
+def extract_oplog_data(line: str) -> Dict[str, Any]:
+    """Extract OPLOG data from format: OPLOG 3\t53\t2026-01-01 11:53:47\t0\t0\t0\t0"""
+    parts = line.split('\t')
+    if len(parts) >= 7 and parts[0].startswith('OPLOG'):
+        return {
+            'type': parts[0],  # OPLOG 3
+            'number': parts[1],  # 53
+            'timestamp': parts[2],  # 2026-01-01 11:53:47
+            'param1': parts[3],  # 0
+            'param2': parts[4],  # 0
+            'param3': parts[5],  # 0
+            'param4': parts[6],  # 0
+            'raw': line
+        }
+    return None
 
 def log(msg: str):
     """Add a log entry with timestamp"""
@@ -146,24 +199,55 @@ def log_attendance_raw(raw_line: str):
     if len(ATTENDANCE_DISPLAY) > 1000:
         ATTENDANCE_DISPLAY.pop(0)
 
-def parse_attendance_line(line: str) -> Dict[str, Any]:
+def parse_attendance_line(line: str, device_sn: str = None) -> Dict[str, Any]:
     """
     Parse attendance line in format:
     USER_ID\tTIMESTAMP\tSTATUS\tVERIFICATION\tWORKCODE
+    Also handles extended formats
     """
     parts = line.split('\t')
     if len(parts) < 3:
-        return {}
+        return None
     
-    record = {
-        'user_id': parts[0],
-        'timestamp': parts[1],
-        'status': parts[2],
-        'verification': parts[3] if len(parts) > 3 else '',
-        'workcode': parts[4] if len(parts) > 4 else '',
-        'received_at': datetime.utcnow().isoformat(),
-        'raw': line
-    }
+    # Clean and validate parts
+    cleaned_parts = []
+    for part in parts:
+        cleaned = part.strip()
+        if cleaned == '':
+            cleaned = '0'
+        cleaned_parts.append(cleaned)
+    
+    # Handle different lengths
+    if len(cleaned_parts) >= 5:
+        record = {
+            'user_id': cleaned_parts[0],
+            'timestamp': cleaned_parts[1],
+            'status': cleaned_parts[2],
+            'verification': cleaned_parts[3],
+            'workcode': cleaned_parts[4],
+            'device_sn': device_sn or DEVICE_SN,
+            'received_at': datetime.utcnow().isoformat(),
+            'raw': line
+        }
+        
+        # Add any additional fields
+        if len(cleaned_parts) > 5:
+            for i in range(5, len(cleaned_parts)):
+                record[f'extra_{i-4}'] = cleaned_parts[i]
+    elif len(cleaned_parts) >= 3:
+        # Minimal format
+        record = {
+            'user_id': cleaned_parts[0],
+            'timestamp': cleaned_parts[1],
+            'status': cleaned_parts[2],
+            'verification': '0',
+            'workcode': '0',
+            'device_sn': device_sn or DEVICE_SN,
+            'received_at': datetime.utcnow().isoformat(),
+            'raw': line
+        }
+    else:
+        return None
     
     # Map status codes to human readable
     status_map = {
@@ -181,7 +265,7 @@ def parse_attendance_line(line: str) -> Dict[str, Any]:
 
 async def log_request(request: Request, body: str):
     """Log device request details"""
-    global DEVICE_CONNECTED, LAST_DEVICE_CONTACT
+    global DEVICE_CONNECTED, LAST_DEVICE_CONTACT, DEVICE_SN
     DEVICE_CONNECTED = True
     LAST_DEVICE_CONTACT = datetime.utcnow()
     
@@ -190,6 +274,16 @@ async def log_request(request: Request, body: str):
     log(f"  ENDPOINT : {request.url.path}")
     log(f"  METHOD   : {request.method}")
     log(f"  QUERY    : {dict(request.query_params)}")
+    
+    # Try to extract device SN from query params
+    sn = request.query_params.get("SN") or request.query_params.get("sn")
+    if sn:
+        DEVICE_SN = sn
+        if sn not in DEVICE_SERIAL_NUMBERS:
+            DEVICE_SERIAL_NUMBERS.append(sn)
+            log(f"  📱 NEW DEVICE SN: {sn}")
+            save_persistent_data()
+    
     if body and len(body) > 1000:
         log(f"  BODY     : {body[:1000]}... ({len(body)} chars)")
     else:
@@ -216,6 +310,8 @@ async def auto_send_commands():
                 COMMAND_QUEUE.append("SET OPTION PUSH=1")
                 COMMAND_QUEUE.append("DATA")  # Alternative command for attendance
                 COMMAND_QUEUE.append("GET ATTLOG ALL")
+                COMMAND_QUEUE.append("GET LOG ALL")  # Get all logs
+                COMMAND_QUEUE.append("GET OPLOG")  # Get operation logs
                 log("🤖 Auto-added initial commands")
                 IS_FETCHING_ALL_LOGS = True
                 first_run = False
@@ -225,7 +321,8 @@ async def auto_send_commands():
             # If device is active but queue is empty, add attendance command
             if device_active and not COMMAND_QUEUE:
                 COMMAND_QUEUE.append("GET ATTLOG ALL")
-                log("🔄 Added GET ATTLOG ALL to empty queue")
+                COMMAND_QUEUE.append("GET LOG ALL")
+                log("🔄 Added GET ATTLOG ALL and GET LOG ALL to empty queue")
                 
         except Exception as e:
             log(f"⚠️ Error in auto_send_commands: {e}")
@@ -238,7 +335,7 @@ async def startup_event():
     asyncio.create_task(auto_send_commands())
     asyncio.create_task(periodic_save())
     asyncio.create_task(check_device_status())
-    log("🚀 eSSL Probe Started")
+    log("🚀 eSSL Probe Started with FULL DATABASE EXTRACTION")
 
 async def periodic_save():
     """Periodically save data to disk"""
@@ -261,7 +358,7 @@ async def check_device_status():
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Main dashboard page"""
-    current_time = datetime.utcnow().isoformat() + "Z"
+    current_time = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
     
     # Get statistics
     today = datetime.utcnow().date()
@@ -273,7 +370,7 @@ async def home(request: Request):
     
     # Device status
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
-    last_contact = LAST_DEVICE_CONTACT.isoformat() if LAST_DEVICE_CONTACT else "Never"
+    last_contact = LAST_DEVICE_CONTACT.strftime('%Y-%m-%d %H:%M:%S') if LAST_DEVICE_CONTACT else "Never"
     
     return templates.TemplateResponse(
         "index.html",
@@ -292,7 +389,8 @@ async def home(request: Request):
             "device_info": DEVICE_INFO,
             "fetching_all": IS_FETCHING_ALL_LOGS,
             "device_connected": DEVICE_CONNECTED,
-            "last_contact": last_contact
+            "last_contact": last_contact,
+            "device_serials": DEVICE_SERIAL_NUMBERS
         }
     )
 
@@ -306,7 +404,7 @@ async def get_logs():
     
     # Device status
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
-    last_contact = LAST_DEVICE_CONTACT.isoformat() if LAST_DEVICE_CONTACT else "Never"
+    last_contact = LAST_DEVICE_CONTACT.strftime('%Y-%m-%d %H:%M:%S') if LAST_DEVICE_CONTACT else "Never"
     
     return {
         "logs": LOGS[-200:],
@@ -335,7 +433,7 @@ async def send_command(
     
     if endpoint == "/iclock/getrequest.aspx":
         # Handle special commands
-        if command == "FORCE FETCH ALL":
+        if command == "FORCE GET ALL LOGS":
             COMMAND_QUEUE.clear()
             COMMAND_QUEUE.extend([
                 "INFO",
@@ -345,10 +443,13 @@ async def send_command(
                 "DATA",
                 "GET ATTLOG ALL",
                 "TRAN DATA",
-                "GET ATTLOG ALL"
+                "GET LOG ALL",
+                "GET OPLOG",
+                "GET ATTLOG ALL",
+                "GET LOG ALL"
             ])
             IS_FETCHING_ALL_LOGS = True
-            log("🚨 FORCE FETCH: Aggressive commands queued")
+            log("🚨 FORCE FETCH: Aggressive commands queued for ALL LOGS")
         else:
             COMMAND_QUEUE.append(command)
             log(f"✅ COMMAND QUEUED: {command}")
@@ -371,12 +472,15 @@ async def force_fetch_all():
         "DATA",
         "GET ATTLOG ALL",
         "TRAN DATA",
-        "GET ATTLOG ALL"
+        "GET LOG ALL",
+        "GET OPLOG",
+        "GET ATTLOG ALL",
+        "GET LOG ALL"
     ])
     IS_FETCHING_ALL_LOGS = True
     
-    log("🚨 MANUAL FORCE FETCH: Aggressive commands queued to get ALL attendance logs")
-    return PlainTextResponse("Aggressive fetch initiated. Check logs for progress.")
+    log("🚨 MANUAL FORCE FETCH: Aggressive commands queued to get ALL attendance and system logs")
+    return RedirectResponse(url="/", status_code=303)
 
 # ---------------- DEVICE ENDPOINTS ----------------
 
@@ -394,6 +498,7 @@ async def iclock_cdata(request: Request):
     if request.method == "POST":
         lines = body.splitlines()
         attendance_count = 0
+        oplog_count = 0
         other_data = []
         
         log(f"📦 Received {len(lines)} lines of data")
@@ -406,23 +511,62 @@ async def iclock_cdata(request: Request):
             # Log raw line for debugging
             log(f"📥 RAW LINE: {line}")
             
-            # Check for device info
-            if "SN=" in line.upper():
+            # Try to extract device serial number from ANY line
+            serial = extract_device_serial(line)
+            if serial and serial != DEVICE_SN:
                 global DEVICE_SN
-                DEVICE_SN = line.split("SN=")[1].strip() if "SN=" in line else line.split("sn=")[1].strip()
-                log(f"📱 Device SN: {DEVICE_SN}")
+                DEVICE_SN = serial
+                if serial not in DEVICE_SERIAL_NUMBERS:
+                    DEVICE_SERIAL_NUMBERS.append(serial)
+                    log(f"📱 Extracted Device SN: {serial}")
                 DEVICE_INFO['sn'] = DEVICE_SN
-                save_persistent_data()
+            
+            # Check for OPLOG data (operation logs)
+            if line.startswith("OPLOG"):
+                oplog_data = extract_oplog_data(line)
+                if oplog_data:
+                    oplog_count += 1
+                    # Store as attendance with special type
+                    record = {
+                        'user_id': f"OPLOG_{oplog_data['number']}",
+                        'timestamp': oplog_data['timestamp'],
+                        'status': '255',  # Special status for OPLOG
+                        'status_text': f"OPLOG: {oplog_data['type']}",
+                        'verification': oplog_data['param1'],
+                        'workcode': oplog_data['param2'],
+                        'device_sn': DEVICE_SN,
+                        'received_at': datetime.utcnow().isoformat(),
+                        'raw': line,
+                        'type': 'oplog',
+                        'oplog_number': oplog_data['number'],
+                        'oplog_type': oplog_data['type'],
+                        'param3': oplog_data['param3'],
+                        'param4': oplog_data['param4']
+                    }
+                    
+                    # Check for duplicate
+                    record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
+                    existing = any(
+                        f"{r.get('user_id')}_{r.get('timestamp')}_{r.get('status')}" == record_key 
+                        for r in ATTENDANCE_DATA
+                    )
+                    
+                    if not existing:
+                        ATTENDANCE_DATA.append(record)
+                        log_attendance_raw(line)
+                        log(f"📊 OPLOG: {oplog_data['type']} #{oplog_data['number']} at {oplog_data['timestamp']}")
+                    else:
+                        log(f"⚠️ Duplicate OPLOG skipped")
+                    continue
             
             # Try to parse as attendance (tab-separated)
             elif '\t' in line:
                 parts = line.split('\t')
-                log(f"📊 Parsing attendance: {len(parts)} parts")
                 
                 # Check if this looks like attendance data
-                if len(parts) >= 2:
+                if len(parts) >= 3:
                     # Try different parsing strategies
-                    record = parse_attendance_line(line)
+                    record = parse_attendance_line(line, DEVICE_SN)
                     if record:
                         # Check for duplicate
                         record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
@@ -450,8 +594,12 @@ async def iclock_cdata(request: Request):
                 log(f"📝 Non-tab data: {line[:100]}")
         
         if attendance_count > 0:
+            update_attendance_display()
             save_persistent_data()
             log(f"🎉 Added {attendance_count} attendance records (Total: {len(ATTENDANCE_DATA)})")
+        
+        if oplog_count > 0:
+            log(f"📋 Added {oplog_count} OPLOG records")
         
         if other_data:
             log(f"📄 Also received {len(other_data)} lines of other data")
@@ -464,10 +612,12 @@ async def iclock_getrequest(request: Request):
     global DEVICE_SN
     
     # Get query parameters
-    sn = request.query_params.get("SN", "")
+    sn = request.query_params.get("SN", request.query_params.get("sn", ""))
     if sn:
         DEVICE_SN = sn
-        log(f"📱 Device SN from query: {DEVICE_SN}")
+        if sn not in DEVICE_SERIAL_NUMBERS:
+            DEVICE_SERIAL_NUMBERS.append(sn)
+            log(f"📱 Device SN from query: {DEVICE_SN}")
         DEVICE_INFO['sn'] = DEVICE_SN
     
     # Log the pull request
@@ -478,21 +628,26 @@ async def iclock_getrequest(request: Request):
         command = COMMAND_QUEUE.pop(0)
         log(f"📤 SENDING: {command}")
         
-        # Special handling for attendance commands
-        if "ATTLOG" in command:
+        # Special handling for attendance/log commands
+        if "ATTLOG" in command or "LOG" in command:
             async def add_next_command():
-                await asyncio.sleep(5)
-                if not COMMAND_QUEUE:
-                    COMMAND_QUEUE.append("GET ATTLOG")
-                    log("🔄 Auto-added next GET ATTLOG")
+                await asyncio.sleep(2)
+                if not COMMAND_QUEUE and IS_FETCHING_ALL_LOGS:
+                    COMMAND_QUEUE.append("GET ATTLOG ALL")
+                    COMMAND_QUEUE.append("GET LOG ALL")
+                    log("🔄 Auto-added next GET ATTLOG ALL and GET LOG ALL")
             
             asyncio.create_task(add_next_command())
         
         return PlainTextResponse(command)
     else:
-        # Default response
-        log("📤 No commands in queue, sending GET ATTLOG")
-        return PlainTextResponse("GET ATTLOG")
+        # Default response if queue is empty but we're fetching all
+        if IS_FETCHING_ALL_LOGS:
+            log("📤 Auto-adding GET ATTLOG ALL to empty queue")
+            return PlainTextResponse("GET ATTLOG ALL")
+        else:
+            log("📤 No commands in queue, sending GET ATTLOG")
+            return PlainTextResponse("GET ATTLOG")
 
 @app.get("/iclock/registry.aspx")
 async def iclock_registry(request: Request):
@@ -503,7 +658,9 @@ async def iclock_registry(request: Request):
         if key.upper() == "SN":
             global DEVICE_SN
             DEVICE_SN = value
-            log(f"📱 Registered Device SN: {DEVICE_SN}")
+            if value not in DEVICE_SERIAL_NUMBERS:
+                DEVICE_SERIAL_NUMBERS.append(value)
+                log(f"📱 Registered Device SN: {DEVICE_SN}")
         DEVICE_INFO[key] = value
     
     log(f"📋 Registration params: {dict(request.query_params)}")
@@ -521,10 +678,24 @@ async def iclock_devicecmd(request: Request):
     else:
         log(f"📋 DEVICE CMD RESPONSE: {body}")
     
-    # Parse INFO responses
+    # Parse INFO responses and extract device information
     if "=" in body:
         lines = body.splitlines()
         for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Extract device serial number from response
+            serial = extract_device_serial(line)
+            if serial:
+                global DEVICE_SN
+                DEVICE_SN = serial
+                if serial not in DEVICE_SERIAL_NUMBERS:
+                    DEVICE_SERIAL_NUMBERS.append(serial)
+                    log(f"📱 Device SN from response: {DEVICE_SN}")
+            
+            # Parse key-value pairs
             if '=' in line:
                 try:
                     key, value = line.split('=', 1)
@@ -575,7 +746,7 @@ async def export_attendance(format: str = "csv"):
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Verification", "Workcode", "Received At"])
+        writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Verification", "Workcode", "Device SN", "Received At", "Type"])
         
         for record in ATTENDANCE_DATA:
             writer.writerow([
@@ -585,7 +756,9 @@ async def export_attendance(format: str = "csv"):
                 record.get('status_text', ''),
                 record.get('verification', ''),
                 record.get('workcode', ''),
-                record.get('received_at', '')
+                record.get('device_sn', ''),
+                record.get('received_at', ''),
+                record.get('type', 'attendance')
             ])
         
         content = output.getvalue()
@@ -616,8 +789,9 @@ async def get_all_attendance(request: Request):
     """API endpoint to get all attendance data"""
     return {
         "count": len(ATTENDANCE_DATA),
-        "data": ATTENDANCE_DATA[-1000:],
+        "data": ATTENDANCE_DATA,
         "device_sn": DEVICE_SN,
+        "device_serials": DEVICE_SERIAL_NUMBERS,
         "device_info": DEVICE_INFO,
         "fetching_all": IS_FETCHING_ALL_LOGS,
         "device_connected": DEVICE_CONNECTED
@@ -627,11 +801,21 @@ async def get_all_attendance(request: Request):
 async def reset_device():
     """Reset device connection"""
     global COMMAND_QUEUE, IS_FETCHING_ALL_LOGS
-    COMMAND_QUEUE = ["INFO", "GET OPTION", "SET OPTION RTLOG=1", "SET OPTION PUSH=1", "DATA", "GET ATTLOG ALL"]
+    COMMAND_QUEUE = [
+        "INFO", 
+        "GET OPTION", 
+        "SET OPTION RTLOG=1", 
+        "SET OPTION PUSH=1", 
+        "DATA", 
+        "GET ATTLOG ALL",
+        "GET LOG ALL",
+        "GET OPLOG"
+    ]
     IS_FETCHING_ALL_LOGS = True
-    log("🔄 Device connection reset")
-    return PlainTextResponse("OK")
+    log("🔄 Device connection reset - fetching ALL logs")
+    return RedirectResponse(url="/", status_code=303)
 
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
+

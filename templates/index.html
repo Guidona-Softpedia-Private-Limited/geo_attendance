@@ -363,6 +363,24 @@
         padding: 15px;
         margin: 15px 0;
     }
+    
+    .device-serial-list {
+        margin-top: 10px;
+        padding: 10px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 8px;
+        max-height: 100px;
+        overflow-y: auto;
+    }
+    
+    .serial-item {
+        padding: 4px 8px;
+        margin: 2px 0;
+        background: rgba(34, 211, 238, 0.1);
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 11px;
+    }
 </style>
 </head>
 
@@ -383,11 +401,21 @@
             </h2>
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
-                <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
+                <div>Current Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
                 <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
                 <div>Unique Users: <strong id="uniqueUsers">{{ unique_users }}</strong></div>
                 <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
                 <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
+                <div>Device Status: <strong id="deviceStatus">{{ 'Connected' if device_connected else 'Disconnected' }}</strong></div>
+                
+                {% if device_serials %}
+                <div class="device-serial-list">
+                    <div style="font-size: 11px; opacity: 0.7; margin-bottom: 5px;">Detected Device Serials:</div>
+                    {% for serial in device_serials %}
+                    <div class="serial-item">{{ serial }}</div>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
             
             <!-- Statistics -->
@@ -412,9 +440,9 @@
             
             <!-- Aggressive Fetch Controls -->
             <div class="warning-box">
-                <strong>⚠️ GET ALL ATTENDANCE LOGS</strong>
+                <strong>⚠️ GET ALL ATTENDANCE & SYSTEM LOGS</strong>
                 <p style="margin: 8px 0; font-size: 13px; opacity: 0.9;">
-                    This will send multiple "GET ATTLOG ALL" commands to fetch all existing logs from the device.
+                    This will send multiple commands to fetch all existing logs including OPLOG from the device.
                 </p>
                 <div style="display: flex; gap: 10px; margin-top: 10px;">
                     <a href="/force_fetch_all">
@@ -523,7 +551,7 @@
             
             <div class="filter-controls">
                 <div class="search-box">
-                    <input type="text" id="searchUser" placeholder="Search User ID..." oninput="filterAttendance()">
+                    <input type="text" id="searchUser" placeholder="Search User ID or Device SN..." oninput="filterAttendance()">
                     <button class="btn-small" onclick="clearSearch()">Clear</button>
                 </div>
                 <div class="time-filter">
@@ -536,6 +564,7 @@
                 <button class="tab-button active" onclick="switchTab('recentTab')">Recent (100)</button>
                 <button class="tab-button" onclick="switchTab('allTab')">All Records</button>
                 <button class="tab-button" onclick="switchTab('todayTab')">Today Only</button>
+                <button class="tab-button" onclick="switchTab('oplogTab')">OPLOG Data</button>
             </div>
             
             <div id="recentTab" class="tab-content active">
@@ -563,6 +592,12 @@
                     <div class="empty-queue">Loading today's records...</div>
                 </div>
             </div>
+            
+            <div id="oplogTab" class="tab-content">
+                <div class="logs" id="oplogAttBox" style="height: 380px;">
+                    <div class="empty-queue">Loading OPLOG records...</div>
+                </div>
+            </div>
         </div>
 
         <!-- Quick Actions -->
@@ -579,6 +614,16 @@
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
                     <input type="hidden" name="command" value="FORCE GET ALL LOGS">
                     <button type="submit" class="btn-small btn-yellow">🚨 Force Fetch ALL</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="GET LOG ALL">
+                    <button type="submit" class="btn-small">📋 Get ALL Logs</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="GET OPLOG">
+                    <button type="submit" class="btn-small">🔧 Get OPLOG</button>
                 </form>
                 <form method="post" action="/send_command" style="margin: 0;">
                     <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
@@ -622,7 +667,7 @@
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage
+        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data & Device Logs • Persistent Storage
     </footer>
 
 </div>
@@ -695,6 +740,7 @@
             document.getElementById('queueCountValue').textContent = data.queue_count;
             document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
             document.getElementById('attendanceCountValue').textContent = data.attendance_count;
+            document.getElementById('deviceStatus').textContent = data.device_connected ? 'Connected' : 'Disconnected';
             
             // Update fetch status
             const fetchStatus = document.getElementById('fetchStatus');
@@ -744,7 +790,7 @@
             if (allAttBox) {
                 if (allAttendanceData.length > 0) {
                     allAttBox.innerHTML = allAttendanceData.map(record => 
-                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}\t${record.device_sn}</div>`
                     ).join('');
                     allAttBox.scrollTop = allAttBox.scrollHeight;
                 } else {
@@ -768,11 +814,30 @@
         if (todayAttBox) {
             if (todayData.length > 0) {
                 todayAttBox.innerHTML = todayData.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}\t${record.device_sn}</div>`
                 ).join('');
                 todayAttBox.scrollTop = todayAttBox.scrollHeight;
             } else {
                 todayAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
+            }
+        }
+    }
+    
+    // Function to load OPLOG data
+    function loadOplogAttendance() {
+        const oplogData = allAttendanceData.filter(record => 
+            record.type === 'oplog'
+        );
+        
+        const oplogAttBox = document.getElementById('oplogAttBox');
+        if (oplogAttBox) {
+            if (oplogData.length > 0) {
+                oplogAttBox.innerHTML = oplogData.map(record => 
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.oplog_type}\t${record.param3}\t${record.param4}\t${record.device_sn}</div>`
+                ).join('');
+                oplogAttBox.scrollTop = oplogAttBox.scrollHeight;
+            } else {
+                oplogAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No OPLOG data available</div>';
             }
         }
     }
@@ -785,6 +850,7 @@
         filteredAttendance = allAttendanceData.filter(record => {
             const matchesSearch = !searchTerm || 
                 record.user_id.toLowerCase().includes(searchTerm) ||
+                (record.device_sn && record.device_sn.toLowerCase().includes(searchTerm)) ||
                 record.raw.toLowerCase().includes(searchTerm);
             
             const matchesDate = !dateFilter || 
@@ -807,7 +873,7 @@
         if (currentTab === 'allTab') {
             if (filteredAttendance.length > 0) {
                 container.innerHTML = filteredAttendance.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}\t${record.device_sn}</div>`
                 ).join('');
             } else {
                 container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No matching records found</div>';
@@ -848,6 +914,8 @@
             loadAllAttendance();
         } else if (tabName === 'todayTab') {
             loadTodayAttendance();
+        } else if (tabName === 'oplogTab') {
+            loadOplogAttendance();
         } else if (tabName === 'allTab') {
             filterAttendance();
         }
