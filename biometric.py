@@ -26,9 +26,6 @@ COMMAND_QUEUE: List[str] = []
 DEVICE_SN = "Unknown"
 DEVICE_INFO: Dict[str, str] = {}
 
-# Track user check-in status
-USER_CHECKIN_STATUS: Dict[str, bool] = {}  # True = checked in, False = checked out
-
 # File for persistent storage
 DATA_FILE = "attendance_data.json"
 LOG_FILE = "device_logs.txt"
@@ -38,20 +35,18 @@ IS_FETCHING_ALL_LOGS = False
 DEVICE_CONNECTED = False
 LAST_DEVICE_CONTACT = None
 
-# ---------------- AUTO TOGGLE LOGIC ----------------
+# ---------------- STATUS CONVERSION LOGIC ----------------
 
-def auto_toggle_status(user_id: str, original_status: str) -> Dict[str, str]:
+def convert_essl_status(original_status: str) -> Dict[str, str]:
     """
-    Auto toggle logic:
-    - CHECK-IN aaye to CHECK-OUT karo
-    - CHECK-OUT aaye to CHECK-IN karo
-    - Unknown/Other aaye to CHECK-IN karo
-    
-    Returns: {"new_status": "...", "action": "..."}
+    Convert ESSL status according to requirement:
+    - CHECK-IN → CHECK-OUT
+    - CHECK-OUT → CHECK-IN
+    - Unknown → CHECK-IN
     """
     original_status = original_status.upper() if original_status else ""
     
-    # Define status mapping
+    # Map ESSL status codes to text
     status_map = {
         '0': 'CHECK-IN',
         '1': 'CHECK-OUT',
@@ -61,41 +56,39 @@ def auto_toggle_status(user_id: str, original_status: str) -> Dict[str, str]:
         '5': 'OVERTIME-OUT',
         '255': 'ERROR',
         'CHECK-IN': 'CHECK-IN',
-        'CHECK-OUT': 'CHECK-OUT',
+        'CHECKOUT': 'CHECK-OUT',
+        'CHECKOUT': 'CHECK-OUT',
         'CHECKIN': 'CHECK-IN',
-        'CHECKOUT': 'CHECK-OUT'
+        'CHECK-IN': 'CHECK-IN',
+        'CHECK-OUT': 'CHECK-OUT'
     }
     
     # Get standardized original status
     original_std = status_map.get(original_status, 'UNKNOWN')
     
-    # Apply toggle logic
+    # Apply conversion logic
     if original_std == 'CHECK-IN':
         new_status = 'CHECK-OUT'
-        action = f"CHECK-OUT"
-    elif original_std == 'CHECK-OUT':
-        new_status = 'CHECK-IN'
-        action = f"CHECK-IN"
+        action = "CONVERTED: CHECK-IN → CHECK-OUT"
+        status_code = '1'
     else:
-        # All other cases convert to CHECK-IN
+        # For CHECK-OUT, UNKNOWN, or any other status
         new_status = 'CHECK-IN'
-        action = f"CHECK-IN"
-    
-    # Update user status tracking
-    USER_CHECKIN_STATUS[user_id] = (new_status == 'CHECK-IN')
+        action = f"CONVERTED: {original_std} → CHECK-IN"
+        status_code = '0'
     
     return {
         "new_status": new_status,
         "original_status": original_std,
         "action": action,
-        "status_code": '0' if new_status == 'CHECK-IN' else '1'
+        "status_code": status_code
     }
 
 # ---------------- PERSISTENT STORAGE FUNCTIONS ----------------
 
 def load_persistent_data():
     """Load previously saved data from files"""
-    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO, USER_CHECKIN_STATUS
+    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO
     
     try:
         # Load attendance data
@@ -105,9 +98,7 @@ def load_persistent_data():
                 ATTENDANCE_DATA = data.get('attendance', [])
                 DEVICE_SN = data.get('device_sn', "Unknown")
                 DEVICE_INFO = data.get('device_info', {})
-                USER_CHECKIN_STATUS = data.get('user_status', {})
                 print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records from file")
-                print(f"📂 Loaded {len(USER_CHECKIN_STATUS)} user status records")
     except Exception as e:
         print(f"⚠️ Error loading persistent data: {e}")
     
@@ -131,7 +122,6 @@ def save_persistent_data():
             'attendance': ATTENDANCE_DATA,
             'device_sn': DEVICE_SN,
             'device_info': DEVICE_INFO,
-            'user_status': USER_CHECKIN_STATUS,
             'last_updated': datetime.utcnow().isoformat()
         }
         with open(DATA_FILE, 'w') as f:
@@ -155,8 +145,8 @@ def update_attendance_display():
     
     for record in ATTENDANCE_DATA[-1000:]:  # Show last 1000 records in UI
         line = f"{record.get('user_id', 'N/A')}\t{record.get('timestamp', 'N/A')}\t{record.get('status', 'N/A')}"
-        if record.get('auto_converted'):
-            line += f"\t[✔ AUTO: {record.get('original_status', '')} → {record.get('status', '')}]"
+        if record.get('converted'):
+            line += f"\t[✓ {record.get('original_status', '')} → {record.get('status', '')}]"
         line += f"\t{record.get('verification', 'N/A')}\t{record.get('workcode', 'N/A')}"
         ATTENDANCE_DISPLAY.append(line)
 
@@ -208,12 +198,12 @@ def log_attendance_raw(raw_line: str):
     if len(ATTENDANCE_DISPLAY) > 1000:
         ATTENDANCE_DISPLAY.pop(0)
 
-def parse_attendance_line(line: str, apply_auto_toggle: bool = True) -> Dict[str, Any]:
+def parse_attendance_line(line: str, apply_conversion: bool = True) -> Dict[str, Any]:
     """
     Parse attendance line in format:
     USER_ID\tTIMESTAMP\tSTATUS\tVERIFICATION\tWORKCODE
     
-    If apply_auto_toggle is True, apply the auto-toggle logic
+    If apply_conversion is True, apply the status conversion logic
     """
     parts = line.split('\t')
     if len(parts) < 3:
@@ -225,24 +215,24 @@ def parse_attendance_line(line: str, apply_auto_toggle: bool = True) -> Dict[str
     verification = parts[3] if len(parts) > 3 else ''
     workcode = parts[4] if len(parts) > 4 else ''
     
-    # Apply auto-toggle logic
-    if apply_auto_toggle:
-        toggle_result = auto_toggle_status(user_id, original_status)
-        new_status = toggle_result["new_status"]
-        action = toggle_result["action"]
+    # Apply status conversion logic
+    if apply_conversion:
+        conversion_result = convert_essl_status(original_status)
+        new_status = conversion_result["new_status"]
+        action = conversion_result["action"]
         
-        # Create record with auto-toggle information
+        # Create record with conversion information
         record = {
             'user_id': user_id,
             'timestamp': timestamp,
             'status': new_status,
-            'original_status': toggle_result["original_status"],
-            'status_code': toggle_result["status_code"],
+            'original_status': conversion_result["original_status"],
+            'status_code': conversion_result["status_code"],
             'verification': verification,
             'workcode': workcode,
             'received_at': datetime.utcnow().isoformat(),
             'raw': line,
-            'auto_converted': True,
+            'converted': True,
             'conversion_action': action
         }
         
@@ -262,7 +252,7 @@ def parse_attendance_line(line: str, apply_auto_toggle: bool = True) -> Dict[str
         log(f"🔄 {action} for User {user_id} at {timestamp}")
         
     else:
-        # Without auto-toggle
+        # Without conversion
         record = {
             'user_id': user_id,
             'timestamp': timestamp,
@@ -271,7 +261,7 @@ def parse_attendance_line(line: str, apply_auto_toggle: bool = True) -> Dict[str
             'workcode': workcode,
             'received_at': datetime.utcnow().isoformat(),
             'raw': line,
-            'auto_converted': False
+            'converted': False
         }
         
         # Map status codes to human readable
@@ -347,8 +337,8 @@ async def startup_event():
     asyncio.create_task(auto_send_commands())
     asyncio.create_task(periodic_save())
     asyncio.create_task(check_device_status())
-    log("🚀 eSSL Probe Started with AUTO-TOGGLE logic")
-    log("ℹ️  Auto-toggle: CHECK-OUT, CHECK-IN")
+    log("🚀 eSSL Probe Started with Status Conversion")
+    log("ℹ️  Conversion: CHECK-IN → CHECK-OUT, CHECK-OUT/Unknown → CHECK-IN")
 
 async def periodic_save():
     """Periodically save data to disk"""
@@ -381,8 +371,8 @@ async def home(request: Request):
     # Get unique users
     unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
     
-    # Count auto-converted records
-    auto_converted = sum(1 for r in ATTENDANCE_DATA if r.get('auto_converted', False))
+    # Count converted records
+    converted = sum(1 for r in ATTENDANCE_DATA if r.get('converted', False))
     
     # Device status
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
@@ -406,7 +396,7 @@ async def home(request: Request):
             "fetching_all": IS_FETCHING_ALL_LOGS,
             "device_connected": DEVICE_CONNECTED,
             "last_contact": last_contact,
-            "auto_converted": auto_converted
+            "converted": converted
         }
     )
 
@@ -417,7 +407,7 @@ async def get_logs():
     today_records = [r for r in ATTENDANCE_DATA 
                     if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]
     unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
-    auto_converted = sum(1 for r in ATTENDANCE_DATA if r.get('auto_converted', False))
+    converted = sum(1 for r in ATTENDANCE_DATA if r.get('converted', False))
     
     # Device status
     device_status = "Connected" if DEVICE_CONNECTED else "Disconnected"
@@ -437,7 +427,7 @@ async def get_logs():
         "fetching_all": IS_FETCHING_ALL_LOGS,
         "device_connected": DEVICE_CONNECTED,
         "last_contact": last_contact,
-        "auto_converted": auto_converted
+        "converted": converted
     }
 
 @app.post("/send_command", response_class=HTMLResponse)
@@ -537,8 +527,8 @@ async def iclock_cdata(request: Request):
                 
                 # Check if this looks like attendance data
                 if len(parts) >= 2:
-                    # Parse with auto-toggle logic (default: True)
-                    record = parse_attendance_line(line, apply_auto_toggle=True)
+                    # Parse with status conversion logic (default: True)
+                    record = parse_attendance_line(line, apply_conversion=True)
                     if record:
                         # Check for duplicate
                         record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
@@ -551,18 +541,18 @@ async def iclock_cdata(request: Request):
                             ATTENDANCE_DATA.append(record)
                             attendance_count += 1
                             
-                            # Create display line with auto-toggle indicator
+                            # Create display line with conversion indicator
                             display_line = f"{record['user_id']}\t{record['timestamp']}\t{record['status']}"
-                            if record.get('auto_converted'):
-                                display_line += f"\t[✔ AUTO: {record.get('original_status', '')} → {record['status']}]"
+                            if record.get('converted'):
+                                display_line += f"\t[✓ {record.get('original_status', '')} → {record['status']}]"
                             display_line += f"\t{record.get('verification', '')}\t{record.get('workcode', '')}"
                             
                             log_attendance_raw(display_line)
                             log(f"✅ Attendance: User {record['user_id']} at {record['timestamp']} ({record['status']})")
                             
-                            # If auto-converted, log the action
-                            if record.get('auto_converted'):
-                                log(f"   ↳ {record.get('conversion_action', 'Auto-converted')}")
+                            # If converted, log the action
+                            if record.get('converted'):
+                                log(f"   ↳ {record.get('conversion_action', 'Converted')}")
                         else:
                             log(f"⚠️ Duplicate attendance skipped")
                     else:
@@ -686,11 +676,10 @@ async def clear_logs(request: Request):
 @app.post("/clear_attendance")
 async def clear_attendance(request: Request):
     """Clear attendance data"""
-    global ATTENDANCE_DATA, ATTENDANCE_DISPLAY, USER_CHECKIN_STATUS
+    global ATTENDANCE_DATA, ATTENDANCE_DISPLAY
     ATTENDANCE_DATA = []
     ATTENDANCE_DISPLAY = []
-    USER_CHECKIN_STATUS = {}
-    log("🧹 All attendance data and user status cleared")
+    log("🧹 All attendance data cleared")
     save_persistent_data()
     return PlainTextResponse("OK")
 
@@ -703,7 +692,7 @@ async def export_attendance(format: str = "csv"):
     if format == "csv":
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Original Status", "Verification", "Workcode", "Received At", "Auto-Converted"])
+        writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Original Status", "Verification", "Workcode", "Received At", "Converted"])
         
         for record in ATTENDANCE_DATA:
             writer.writerow([
@@ -715,7 +704,7 @@ async def export_attendance(format: str = "csv"):
                 record.get('verification', ''),
                 record.get('workcode', ''),
                 record.get('received_at', ''),
-                "Yes" if record.get('auto_converted') else "No"
+                "Yes" if record.get('converted') else "No"
             ])
         
         content = output.getvalue()
@@ -751,8 +740,7 @@ async def get_all_attendance(request: Request):
         "device_info": DEVICE_INFO,
         "fetching_all": IS_FETCHING_ALL_LOGS,
         "device_connected": DEVICE_CONNECTED,
-        "auto_converted_count": sum(1 for r in ATTENDANCE_DATA if r.get('auto_converted', False)),
-        "user_status_count": len(USER_CHECKIN_STATUS)
+        "converted_count": sum(1 for r in ATTENDANCE_DATA if r.get('converted', False))
     }
 
 @app.get("/reset_device")
@@ -763,13 +751,6 @@ async def reset_device():
     IS_FETCHING_ALL_LOGS = True
     log("🔄 Device connection reset")
     return PlainTextResponse("OK")
-
-@app.get("/toggle_mode")
-async def toggle_auto_toggle():
-    """Toggle auto-toggle mode on/off"""
-    # This endpoint can be used to enable/disable auto-toggle if needed
-    # Currently always enabled based on requirement
-    return PlainTextResponse("Auto-toggle mode is ALWAYS ENABLED: CHECK-OUT, CHECK-IN")
 
 @app.get("/favicon.ico")
 async def favicon():
@@ -782,19 +763,24 @@ async def get_stats():
     today_records = [r for r in ATTENDANCE_DATA 
                     if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]
     
-    auto_converted = sum(1 for r in ATTENDANCE_DATA if r.get('auto_converted', False))
+    converted = sum(1 for r in ATTENDANCE_DATA if r.get('converted', False))
     
     # Check-in vs Check-out count
     check_in_count = sum(1 for r in ATTENDANCE_DATA if r.get('status', '').upper() in ['CHECK-IN', '0'])
     check_out_count = sum(1 for r in ATTENDANCE_DATA if r.get('status', '').upper() in ['CHECK-OUT', '1'])
     
+    # Original vs converted counts
+    original_checkins = sum(1 for r in ATTENDANCE_DATA if r.get('original_status', '').upper() in ['CHECK-IN'])
+    original_checkouts = sum(1 for r in ATTENDANCE_DATA if r.get('original_status', '').upper() in ['CHECK-OUT'])
+    
     return {
         "total_records": len(ATTENDANCE_DATA),
         "today_records": len(today_records),
         "unique_users": len(set(r.get('user_id', '') for r in ATTENDANCE_DATA)),
-        "auto_converted": auto_converted,
+        "converted": converted,
         "check_in_count": check_in_count,
         "check_out_count": check_out_count,
-        "user_status_tracking": len(USER_CHECKIN_STATUS),
+        "original_checkins": original_checkins,
+        "original_checkouts": original_checkouts,
         "last_update": max((r.get('received_at', '') for r in ATTENDANCE_DATA), default='Never')
     }
