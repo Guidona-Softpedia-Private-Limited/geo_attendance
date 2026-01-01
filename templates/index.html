@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>eSSL Probe UI - Status Conversion</title>
+<title>eSSL Probe UI - Device-Specific Conversion</title>
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 
@@ -366,12 +366,39 @@
         margin: 10px 0;
         font-size: 12px;
     }
+    
+    .device-rules {
+        background: rgba(139, 92, 246, 0.1);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-radius: 10px;
+        padding: 12px;
+        margin: 10px 0;
+        font-size: 11px;
+    }
+    
+    .rule-item {
+        display: flex;
+        justify-content: space-between;
+        margin: 5px 0;
+        padding: 4px 0;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+    
+    .device-chip {
+        display: inline-block;
+        background: rgba(34, 211, 238, 0.2);
+        border: 1px solid #22d3ee;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 10px;
+        margin-left: 5px;
+    }
 </style>
 </head>
 
 <body>
 
-<h1>⚡ eSSL Probe Dashboard - Status Conversion</h1>
+<h1>⚡ eSSL Probe Dashboard - Device-Specific Conversion</h1>
 
 <div class="container">
 
@@ -385,23 +412,29 @@
                 </span>
             </h2>
             
-            <!-- Status Conversion Info -->
-            <div class="conversion-info">
-                <strong>🔄 STATUS CONVERSION:</strong>
-                <div style="margin-top: 5px;">
-                    <span style="color: #f59e0b;">CHECK-IN</span> → <span style="color: #10b981;">CHECK-OUT</span>
+            <!-- Device Rules Info -->
+            <div class="device-rules">
+                <strong>📋 DEVICE CONVERSION RULES:</strong>
+                {% for sn, rule in device_rules.items() %}
+                <div class="rule-item">
+                    <span>{{ sn }}</span>
+                    <span style="color: {{ '#f59e0b' if rule.target_status == 'CHECK-IN' else '#10b981' }}">
+                        → {{ rule.target_status }}
+                    </span>
                 </div>
-                <div style="margin-top: 3px;">
-                    <span style="color: #10b981;">CHECK-OUT / Unknown</span> → <span style="color: #f59e0b;">CHECK-IN</span>
-                </div>
-                <div style="font-size: 11px; opacity: 0.8; margin-top: 5px;">
-                    Converted: <strong id="converted">{{ converted }}</strong> records
+                {% endfor %}
+                <div style="margin-top: 5px; font-size: 10px; opacity: 0.7;">
+                    Other devices: Show original status
                 </div>
             </div>
             
             <div class="device-info">
                 <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
-                <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
+                <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong>
+                    {% if device_sn in device_rules %}
+                    <span class="device-chip">CONVERTING</span>
+                    {% endif %}
+                </div>
                 <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
                 <div>Unique Users: <strong id="uniqueUsers">{{ unique_users }}</strong></div>
                 <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
@@ -490,6 +523,19 @@
                     {% endif %}
                 </div>
             </div>
+            
+            <!-- Add Device Rule -->
+            <div style="margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 10px;">
+                <h3 style="margin-top: 0; margin-bottom: 10px;">Add Device Rule</h3>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="deviceSnInput" placeholder="Device SN" style="flex: 2;">
+                    <select id="targetStatusSelect" style="flex: 1;">
+                        <option value="CHECK-IN">CHECK-IN</option>
+                        <option value="CHECK-OUT">CHECK-OUT</option>
+                    </select>
+                    <button class="btn-small btn-purple" onclick="addDeviceRule()">Add Rule</button>
+                </div>
+            </div>
         </div>
 
         <!-- Device Logs -->
@@ -552,6 +598,14 @@
                 <div class="time-filter">
                     <input type="date" id="dateFilter" onchange="filterAttendance()">
                     <button class="btn-small" onclick="clearDateFilter()">Clear Date</button>
+                </div>
+                <div class="device-filter">
+                    <select id="deviceFilter" onchange="filterAttendance()">
+                        <option value="">All Devices</option>
+                        {% for sn, rule in device_rules.items() %}
+                        <option value="{{ sn }}">{{ sn }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
             
@@ -648,7 +702,7 @@
     </div>
 
     <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • Status Conversion: CHECK-IN→CHECK-OUT, CHECK-OUT/Unknown→CHECK-IN
+        eSSL / ZKTeco iClock Probe • FastAPI • Device-Specific Status Conversion
     </footer>
 
 </div>
@@ -710,7 +764,6 @@
             }
             
             // Update counters
-            document.getElementById('logsCount').textContent = data.logs_count;
             document.getElementById('totalRecords').textContent = data.attendance_count;
             document.getElementById('totalRecordsValue').textContent = data.attendance_count;
             document.getElementById('todayRecords').textContent = data.today_count;
@@ -820,6 +873,7 @@
     function filterAttendance() {
         const searchTerm = document.getElementById('searchUser').value.toLowerCase();
         const dateFilter = document.getElementById('dateFilter').value;
+        const deviceFilter = document.getElementById('deviceFilter').value;
         
         filteredAttendance = allAttendanceData.filter(record => {
             const matchesSearch = !searchTerm || 
@@ -829,7 +883,10 @@
             const matchesDate = !dateFilter || 
                 (record.timestamp && record.timestamp.startsWith(dateFilter));
             
-            return matchesSearch && matchesDate;
+            const matchesDevice = !deviceFilter || 
+                record.device_sn === deviceFilter;
+            
+            return matchesSearch && matchesDate && matchesDevice;
         });
         
         // Update current tab
@@ -910,6 +967,32 @@
         }
     }
     
+    // Function to add device rule
+    async function addDeviceRule() {
+        const deviceSn = document.getElementById('deviceSnInput').value;
+        const targetStatus = document.getElementById('targetStatusSelect').value;
+        
+        if (!deviceSn) {
+            alert('Please enter a device serial number');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/add_device_rule?sn=${encodeURIComponent(deviceSn)}&target_status=${encodeURIComponent(targetStatus)}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                alert(`Device rule added: ${deviceSn} → ${targetStatus}`);
+                location.reload();
+            } else {
+                alert(`Error: ${result.error}`);
+            }
+        } catch (error) {
+            console.error('Error adding device rule:', error);
+            alert('Error adding device rule');
+        }
+    }
+    
     // Initialize auto-refresh
     function initAutoRefresh() {
         const autoRefreshCheckbox = document.getElementById('autoRefresh');
@@ -971,6 +1054,7 @@
     window.filterAttendance = filterAttendance;
     window.clearSearch = clearSearch;
     window.clearDateFilter = clearDateFilter;
+    window.addDeviceRule = addDeviceRule;
 </script>
 
 </body>
