@@ -3,387 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>eSSL Attendance Fetcher</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Simplified eSSL Probe - Attendance Logs</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-        .status-live { background: #10b981; color: white; }
-        .status-historical { background: #3b82f6; color: white; }
-        .attendance-row {
-            border-bottom: 1px solid #e5e7eb;
-            padding: 8px 0;
-        }
-        .attendance-row:last-child {
-            border-bottom: none;
-        }
+        body { margin: 0; font-family: 'Inter', sans-serif; background: #000; color: #e5e7eb; }
+        h1 { text-align: center; color: #22d3ee; }
+        .container { max-width: 1200px; margin: auto; padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; }
+        h2 { color: #38bdf8; }
+        .logs { background: #020617; border-radius: 8px; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .log-line { margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        button { background: #22d3ee; color: #000; border: none; padding: 10px; border-radius: 8px; cursor: pointer; }
+        .status { font-size: 14px; margin-bottom: 10px; }
     </style>
 </head>
-<body class="bg-gray-50">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800">
-                <i class="fas fa-fingerprint mr-3 text-blue-600"></i>
-                eSSL Attendance Fetcher
-            </h1>
-            <p class="text-gray-600 mt-2">
-                Device SN: <span class="font-bold" id="deviceSn">{{ device_sn }}</span>
-            </p>
-        </header>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- CARD 1: ALL ATTENDANCE RECORDS -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800">
-                            <i class="fas fa-database mr-2 text-blue-600"></i>
-                            All Attendance Records
-                        </h2>
-                        <span class="status-badge status-historical">
-                            {{ total_records }} Total Records
-                        </span>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="fetchAllAttendance()" 
-                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-                            <i class="fas fa-sync-alt mr-2"></i>
-                            Fetch All
-                        </button>
-                        <a href="/api/export/csv" 
-                           class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
-                            <i class="fas fa-download mr-2"></i>
-                            Export CSV
-                        </a>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <p class="text-gray-600 text-sm mb-4">
-                        This fetches ALL historical attendance data from the biometric device.
-                        Use "Fetch All" to get complete attendance logs.
-                    </p>
-                    
-                    <!-- Command Queue -->
-                    <div class="bg-gray-100 rounded-lg p-3 mb-4">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="font-medium text-gray-700">Command Queue</span>
-                            <span id="queueCount" class="bg-gray-700 text-white px-2 py-1 rounded text-xs">
-                                {{ command_queue|length }} commands
-                            </span>
-                        </div>
-                        <div id="commandQueue" class="text-sm">
-                            {% if command_queue %}
-                                {% for cmd in command_queue %}
-                                    <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded mb-1">{{ cmd }}</div>
-                                {% endfor %}
-                            {% else %}
-                                <div class="text-gray-500 italic">No commands in queue</div>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recent Records Preview -->
-                <div class="mt-6">
-                    <h3 class="font-medium text-gray-700 mb-3">Recent Records (Last 100)</h3>
-                    <div class="max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50">
-                        {% if attendance_records %}
-                            {% for record in attendance_records|reverse %}
-                                <div class="attendance-row">
-                                    <div class="flex justify-between">
-                                        <span class="font-medium">User {{ record.user_id }}</span>
-                                        <span class="text-sm text-gray-500">{{ record.timestamp }}</span>
-                                    </div>
-                                    <div class="flex justify-between text-sm mt-1">
-                                        <span class="px-2 py-1 rounded bg-gray-200">
-                                            {{ record.status_text }}
-                                        </span>
-                                        <span class="text-gray-600">
-                                            {{ record.verification }} • {{ record.workcode }}
-                                        </span>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-center text-gray-500 py-8">
-                                <i class="fas fa-inbox text-3xl mb-2"></i>
-                                <p>No attendance records yet</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- CARD 2: LIVE ATTENDANCE -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800">
-                            <i class="fas fa-bolt mr-2 text-green-600"></i>
-                            Live Attendance
-                        </h2>
-                        <span class="status-badge status-live">
-                            <i class="fas fa-circle animate-pulse mr-1"></i>
-                            {{ live_records }} Today
-                        </span>
-                    </div>
-                    <button onclick="refreshLiveAttendance()" 
-                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
-                        <i class="fas fa-redo mr-2"></i>
-                        Refresh
-                    </button>
-                </div>
-
-                <div class="mb-4">
-                    <p class="text-gray-600 text-sm mb-4">
-                        Real-time attendance data from the biometric device.
-                        Updates automatically when device sends new records.
-                    </p>
-                    
-                    <!-- Live Stats -->
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="bg-blue-50 p-4 rounded-lg text-center">
-                            <div class="text-2xl font-bold text-blue-700" id="checkins">0</div>
-                            <div class="text-sm text-blue-600">Check-ins</div>
-                        </div>
-                        <div class="bg-green-50 p-4 rounded-lg text-center">
-                            <div class="text-2xl font-bold text-green-700" id="checkouts">0</div>
-                            <div class="text-sm text-green-600">Check-outs</div>
-                        </div>
-                        <div class="bg-purple-50 p-4 rounded-lg text-center">
-                            <div class="text-2xl font-bold text-purple-700" id="uniqueUsers">0</div>
-                            <div class="text-sm text-purple-600">Unique Users</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Live Attendance List -->
-                <div>
-                    <h3 class="font-medium text-gray-700 mb-3">Today's Attendance</h3>
-                    <div class="max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50" id="liveAttendanceList">
-                        {% if live_attendance %}
-                            {% for record in live_attendance|reverse %}
-                                <div class="attendance-row">
-                                    <div class="flex justify-between">
-                                        <span class="font-medium">User {{ record.user_id }}</span>
-                                        <span class="text-sm text-gray-500">
-                                            {{ record.timestamp.split('T')[1][:8] }}
-                                        </span>
-                                    </div>
-                                    <div class="flex justify-between text-sm mt-1">
-                                        <span class="px-2 py-1 rounded 
-                                            {% if record.status == '0' %}bg-green-100 text-green-800
-                                            {% elif record.status == '1' %}bg-red-100 text-red-800
-                                            {% else %}bg-gray-200 text-gray-800{% endif %}">
-                                            {{ record.status_text }}
-                                        </span>
-                                        <span class="text-gray-600">
-                                            {{ record.verification }}
-                                        </span>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-center text-gray-500 py-8">
-                                <i class="fas fa-clock text-3xl mb-2"></i>
-                                <p>No attendance today yet</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Logs Panel -->
-        <div class="card mt-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-gray-800">
-                    <i class="fas fa-terminal mr-2 text-gray-600"></i>
-                    System Logs
-                </h3>
-                <button onclick="clearLogs()" class="text-sm text-red-600 hover:text-red-800">
-                    <i class="fas fa-trash mr-1"></i> Clear
-                </button>
-            </div>
-            <div class="bg-gray-900 text-green-400 font-mono text-sm rounded-lg p-4 max-h-48 overflow-y-auto" id="logPanel">
-                {% for log in logs %}
-                    <div class="mb-1">{{ log }}</div>
+<body>
+    <h1>Simplified Attendance Dashboard</h1>
+    <div class="container">
+        <!-- Live Attendance Card -->
+        <div class="card">
+            <h2>Live Attendance (Recent 100)</h2>
+            <div class="status">Device: {{ 'Connected' if device_connected else 'Disconnected' }} | Total: {{ total_records }} | Today: {{ today_records }}</div>
+            <div class="logs" id="liveAttBox">
+                {% for line in recent_attendance %}
+                    <div class="log-line">{{ line }}</div>
                 {% endfor %}
             </div>
+            <button onclick="refreshData()">Refresh</button>
         </div>
 
-        <!-- Footer -->
-        <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>eSSL Attendance Fetcher • Simple tool for biometric device data</p>
-            <p class="mt-1">Total Records: <span id="totalRecordsCount">{{ total_records }}</span> | 
-                           Live Today: <span id="liveRecordsCount">{{ live_records }}</span></p>
-        </footer>
+        <!-- All Attendance Card -->
+        <div class="card">
+            <h2>All Attendance Logs</h2>
+            <div class="status">Fetching All: {{ 'Yes' if fetching_all else 'No' }} | Unique Users: {{ unique_users }}</div>
+            <div class="logs" id="allLogsBox">
+                <!-- All logs loaded via JS -->
+            </div>
+            <a href="/export_attendance"><button>Export All CSV</button></a>
+            <a href="/force_fetch_all"><button>Force Fetch All</button></a>
+        </div>
     </div>
 
     <script>
-        // Initialize stats
-        function updateStats() {
-            const checkins = document.querySelectorAll('.status-badge.status-live').length;
-            const checkouts = document.querySelectorAll('.status-badge.status-historical').length;
-            const uniqueUsers = new Set([...document.querySelectorAll('.attendance-row .font-medium')]
-                .map(el => el.textContent.replace('User ', ''))).size;
-            
-            document.getElementById('checkins').textContent = checkins;
-            document.getElementById('checkouts').textContent = checkouts;
-            document.getElementById('uniqueUsers').textContent = uniqueUsers;
+        async function refreshData() {
+            const res = await fetch('/get_logs');
+            const data = await res.json();
+            document.getElementById('liveAttBox').innerHTML = data.recent_attendance.map(line => `<div class="log-line">${line}</div>`).join('');
+            // For all logs, we can load a summary or leave for export
         }
-        
-        // Fetch all attendance from device
-        async function fetchAllAttendance() {
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Fetching...';
-            btn.disabled = true;
-            
-            try {
-                const response = await fetch('/api/fetch/all', { method: 'POST' });
-                const result = await response.json();
-                
-                alert(`Started fetching all attendance\n${result.message}\nCommands queued: ${result.commands_queued}`);
-                
-                // Refresh queue display
-                refreshQueue();
-                
-            } catch (error) {
-                alert('Error fetching attendance: ' + error.message);
-            } finally {
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }, 2000);
-            }
-        }
-        
-        // Refresh live attendance
-        async function refreshLiveAttendance() {
-            const btn = event.target;
-            const originalText = btn.innerHTML;
-            
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Refreshing...';
-            
-            try {
-                const response = await fetch('/api/attendance/live');
-                const data = await response.json();
-                
-                // Update live attendance list
-                const container = document.getElementById('liveAttendanceList');
-                container.innerHTML = '';
-                
-                if (data.data.length === 0) {
-                    container.innerHTML = `
-                        <div class="text-center text-gray-500 py-8">
-                            <i class="fas fa-clock text-3xl mb-2"></i>
-                            <p>No attendance today yet</p>
-                        </div>
-                    `;
-                } else {
-                    data.data.slice(-50).reverse().forEach(record => {
-                        const time = record.timestamp.split('T')[1]?.substring(0, 8) || record.timestamp;
-                        const statusClass = record.status === '0' ? 'bg-green-100 text-green-800' :
-                                          record.status === '1' ? 'bg-red-100 text-red-800' :
-                                          'bg-gray-200 text-gray-800';
-                                        
-                        container.innerHTML += `
-                            <div class="attendance-row">
-                                <div class="flex justify-between">
-                                    <span class="font-medium">User ${record.user_id}</span>
-                                    <span class="text-sm text-gray-500">${time}</span>
-                                </div>
-                                <div class="flex justify-between text-sm mt-1">
-                                    <span class="px-2 py-1 rounded ${statusClass}">
-                                        ${record.status_text}
-                                    </span>
-                                    <span class="text-gray-600">${record.verification}</span>
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
-                
-                // Update counters
-                document.getElementById('liveRecordsCount').textContent = data.count;
-                updateStats();
-                
-            } catch (error) {
-                console.error('Error refreshing live attendance:', error);
-            } finally {
-                btn.innerHTML = originalText;
-            }
-        }
-        
-        // Refresh command queue
-        async function refreshQueue() {
-            try {
-                const response = await fetch('/api/command/queue');
-                const data = await response.json();
-                
-                const container = document.getElementById('commandQueue');
-                const countElement = document.getElementById('queueCount');
-                
-                countElement.textContent = `${data.count} commands`;
-                
-                if (data.queue.length === 0) {
-                    container.innerHTML = '<div class="text-gray-500 italic">No commands in queue</div>';
-                } else {
-                    container.innerHTML = data.queue.map(cmd => 
-                        `<div class="bg-blue-100 text-blue-800 px-3 py-1 rounded mb-1">${cmd}</div>`
-                    ).join('');
-                }
-                
-            } catch (error) {
-                console.error('Error refreshing queue:', error);
-            }
-        }
-        
-        // Clear logs
-        function clearLogs() {
-            document.getElementById('logPanel').innerHTML = '';
-        }
-        
-        // Add log entry
-        function addLog(message) {
-            const logPanel = document.getElementById('logPanel');
-            const timestamp = new Date().toLocaleTimeString();
-            logPanel.innerHTML += `<div class="mb-1">[${timestamp}] ${message}</div>`;
-            logPanel.scrollTop = logPanel.scrollHeight;
-        }
-        
-        // Auto-refresh queue every 10 seconds
-        setInterval(refreshQueue, 10000);
-        
-        // Auto-refresh live attendance every 30 seconds
-        setInterval(refreshLiveAttendance, 30000);
-        
-        // Initialize stats on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            updateStats();
-            
-            // Add welcome log
-            addLog('Dashboard loaded successfully');
-            addLog(`Device: ${document.getElementById('deviceSn').textContent}`);
-            addLog(`Total records: ${document.getElementById('totalRecordsCount').textContent}`);
-        });
+        // Optionally load all logs into allLogsBox if needed, but since priority is export, keep simple
     </script>
 </body>
 </html>
