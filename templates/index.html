@@ -3,55 +3,556 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Simplified eSSL Probe - Attendance Logs</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <title>eSSL Attendance Fetcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { margin: 0; font-family: 'Inter', sans-serif; background: #000; color: #e5e7eb; }
-        h1 { text-align: center; color: #22d3ee; }
-        .container { max-width: 1200px; margin: auto; padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .card { background: rgba(255,255,255,0.05); border-radius: 12px; padding: 20px; }
-        h2 { color: #38bdf8; }
-        .logs { background: #020617; border-radius: 8px; padding: 10px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; }
-        .log-line { margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-        button { background: #22d3ee; color: #000; border: none; padding: 10px; border-radius: 8px; cursor: pointer; }
-        .status { font-size: 14px; margin-bottom: 10px; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: transform 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-live { background: #10b981; color: white; }
+        .status-historical { background: #3b82f6; color: white; }
+        .attendance-row {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 10px 0;
+        }
+        .attendance-row:last-child {
+            border-bottom: none;
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
     </style>
 </head>
-<body>
-    <h1>Simplified Attendance Dashboard</h1>
-    <div class="container">
-        <!-- Live Attendance Card -->
-        <div class="card">
-            <h2>Live Attendance (Recent 100)</h2>
-            <div class="status">Device: {{ 'Connected' if device_connected else 'Disconnected' }} | Total: {{ total_records }} | Today: {{ today_records }}</div>
-            <div class="logs" id="liveAttBox">
-                {% for line in recent_attendance %}
-                    <div class="log-line">{{ line }}</div>
-                {% endfor %}
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800">
+                <i class="fas fa-fingerprint mr-3 text-blue-600"></i>
+                eSSL Attendance Fetcher
+            </h1>
+            <div class="mt-4 flex flex-wrap justify-center gap-4">
+                <div class="bg-white px-4 py-2 rounded-lg shadow">
+                    <span class="text-gray-600">Device:</span>
+                    <span class="font-bold ml-2" id="deviceSn">{{ device_sn }}</span>
+                </div>
+                <div class="bg-blue-50 px-4 py-2 rounded-lg shadow">
+                    <span class="text-blue-600">Total Records:</span>
+                    <span class="font-bold ml-2" id="totalRecordsCount">{{ total_records }}</span>
+                </div>
+                <div class="bg-green-50 px-4 py-2 rounded-lg shadow">
+                    <span class="text-green-600">Live Today:</span>
+                    <span class="font-bold ml-2" id="liveRecordsCount">{{ live_records }}</span>
+                </div>
             </div>
-            <button onclick="refreshData()">Refresh</button>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- CARD 1: ALL ATTENDANCE RECORDS -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-database mr-2 text-blue-600"></i>
+                            All Attendance Records
+                        </h2>
+                        <span class="status-badge status-historical mt-2">
+                            {{ total_records }} Total Records
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="fetchAllAttendance()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Fetch All
+                        </button>
+                        <a href="/api/export/csv" 
+                           class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                            <i class="fas fa-download mr-2"></i>
+                            Export CSV
+                        </a>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <p class="text-gray-600 text-sm mb-4 p-3 bg-blue-50 rounded-lg">
+                        <i class="fas fa-info-circle mr-2 text-blue-500"></i>
+                        Fetches ALL historical attendance data from the biometric device.
+                        Use "Fetch All" to get complete attendance logs.
+                    </p>
+                    
+                    <!-- Command Queue -->
+                    <div class="bg-gray-100 rounded-lg p-4 mb-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="font-medium text-gray-700">
+                                <i class="fas fa-list mr-2"></i>Command Queue
+                            </span>
+                            <span id="queueCount" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                {{ command_queue|length }} commands
+                            </span>
+                        </div>
+                        <div id="commandQueue" class="text-sm space-y-1">
+                            {% if command_queue %}
+                                {% for cmd in command_queue %}
+                                    <div class="bg-blue-100 text-blue-800 px-3 py-2 rounded border border-blue-200">
+                                        <i class="fas fa-arrow-right mr-2 text-xs"></i>{{ cmd }}
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-gray-500 italic text-center py-3">
+                                    <i class="fas fa-inbox mr-2"></i>No commands in queue
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Records Preview -->
+                <div class="mt-6">
+                    <h3 class="font-medium text-gray-700 mb-3 flex items-center">
+                        <i class="fas fa-history mr-2"></i>Recent Records (Last 100)
+                    </h3>
+                    <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                        {% if attendance_records %}
+                            {% for record in attendance_records|reverse %}
+                                <div class="attendance-row">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <span class="font-medium text-gray-800">User {{ record.user_id }}</span>
+                                            <div class="text-xs text-gray-500 mt-1">{{ record.display_date }}</div>
+                                        </div>
+                                        <div class="text-right">
+                                            <span class="text-sm font-medium text-gray-700">{{ record.display_time }}</span>
+                                            <div class="text-xs text-gray-500 mt-1">{{ record.status_text }}</div>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-between text-sm mt-2">
+                                        <span class="px-2 py-1 rounded bg-gray-100 text-gray-700">
+                                            {{ record.verification }}
+                                        </span>
+                                        <span class="text-gray-600">
+                                            {{ record.workcode }}
+                                        </span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-gray-500 py-8">
+                                <i class="fas fa-inbox text-4xl mb-3"></i>
+                                <p class="font-medium">No attendance records yet</p>
+                                <p class="text-sm mt-1">Click "Fetch All" to get data from device</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- CARD 2: LIVE ATTENDANCE -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-bolt mr-2 text-green-600 pulse"></i>
+                            Live Attendance
+                        </h2>
+                        <span class="status-badge status-live mt-2">
+                            <i class="fas fa-circle mr-1 text-xs"></i>
+                            {{ live_records }} Today
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="refreshLiveAttendance()" 
+                                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                            <i class="fas fa-redo mr-2"></i>
+                            Refresh
+                        </button>
+                        <button onclick="sendCommand('GET ATTLOG')" 
+                                class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                            <i class="fas fa-sync mr-2"></i>
+                            Get Live
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <p class="text-gray-600 text-sm mb-4 p-3 bg-green-50 rounded-lg">
+                        <i class="fas fa-info-circle mr-2 text-green-500"></i>
+                        Real-time attendance data from the biometric device.
+                        Updates automatically when device sends new records.
+                    </p>
+                    
+                    <!-- Live Stats -->
+                    <div class="grid grid-cols-3 gap-4 mb-6">
+                        <div class="bg-blue-50 p-4 rounded-lg text-center border border-blue-100">
+                            <div class="text-2xl font-bold text-blue-700" id="checkins">0</div>
+                            <div class="text-sm text-blue-600">Check-ins</div>
+                        </div>
+                        <div class="bg-red-50 p-4 rounded-lg text-center border border-red-100">
+                            <div class="text-2xl font-bold text-red-700" id="checkouts">0</div>
+                            <div class="text-sm text-red-600">Check-outs</div>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg text-center border border-purple-100">
+                            <div class="text-2xl font-bold text-purple-700" id="uniqueUsers">0</div>
+                            <div class="text-sm text-purple-600">Unique Users</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Attendance List -->
+                <div>
+                    <h3 class="font-medium text-gray-700 mb-3 flex items-center">
+                        <i class="fas fa-clock mr-2"></i>Today's Attendance
+                    </h3>
+                    <div class="max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50" id="liveAttendanceList">
+                        {% if live_attendance %}
+                            {% for record in live_attendance|reverse %}
+                                <div class="attendance-row">
+                                    <div class="flex justify-between items-start">
+                                        <div>
+                                            <span class="font-medium text-gray-800">User {{ record.user_id }}</span>
+                                            <div class="text-xs text-gray-500 mt-1">
+                                                {% if record.display_time %}
+                                                    {{ record.display_time }}
+                                                {% else %}
+                                                    {{ record.timestamp[11:19] if record.timestamp|length > 19 else record.timestamp }}
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span class="px-3 py-1 rounded-full text-xs font-bold 
+                                                {% if record.status == '0' %}bg-green-100 text-green-800
+                                                {% elif record.status == '1' %}bg-red-100 text-red-800
+                                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                                {{ record.status_text }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="text-sm text-gray-600 mt-2 flex justify-between">
+                                        <span>
+                                            <i class="fas fa-key mr-1"></i>{{ record.verification }}
+                                        </span>
+                                        <span>
+                                            <i class="fas fa-barcode mr-1"></i>{{ record.workcode }}
+                                        </span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-gray-500 py-8">
+                                <i class="fas fa-clock text-4xl mb-3"></i>
+                                <p class="font-medium">No attendance today yet</p>
+                                <p class="text-sm mt-1">Waiting for device data...</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- All Attendance Card -->
-        <div class="card">
-            <h2>All Attendance Logs</h2>
-            <div class="status">Fetching All: {{ 'Yes' if fetching_all else 'No' }} | Unique Users: {{ unique_users }}</div>
-            <div class="logs" id="allLogsBox">
-                <!-- All logs loaded via JS -->
+        <!-- Logs Panel -->
+        <div class="card mt-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-terminal mr-2 text-gray-600"></i>
+                    System Logs
+                </h3>
+                <div class="flex gap-2">
+                    <button onclick="refreshLogs()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
+                        <i class="fas fa-redo mr-1"></i> Refresh
+                    </button>
+                    <button onclick="clearLogs()" class="text-sm text-red-600 hover:text-red-800 flex items-center">
+                        <i class="fas fa-trash mr-1"></i> Clear
+                    </button>
+                </div>
             </div>
-            <a href="/export_attendance"><button>Export All CSV</button></a>
-            <a href="/force_fetch_all"><button>Force Fetch All</button></a>
+            <div class="bg-gray-900 text-green-400 font-mono text-sm rounded-lg p-4 max-h-48 overflow-y-auto" id="logPanel">
+                {% for log in logs %}
+                    <div class="mb-1 border-b border-gray-800 pb-1">{{ log }}</div>
+                {% endfor %}
+            </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>eSSL Attendance Fetcher • Simple tool for biometric device data</p>
+            <p class="mt-1 text-xs">
+                Last update: <span id="lastUpdateTime">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+            </p>
+        </footer>
     </div>
 
     <script>
-        async function refreshData() {
-            const res = await fetch('/get_logs');
-            const data = await res.json();
-            document.getElementById('liveAttBox').innerHTML = data.recent_attendance.map(line => `<div class="log-line">${line}</div>`).join('');
-            // For all logs, we can load a summary or leave for export
+        // Initialize stats
+        function updateStats() {
+            const liveContainer = document.getElementById('liveAttendanceList');
+            if (!liveContainer) return;
+            
+            const checkins = liveContainer.querySelectorAll('.bg-green-100').length;
+            const checkouts = liveContainer.querySelectorAll('.bg-red-100').length;
+            
+            // Get unique users
+            const userElements = liveContainer.querySelectorAll('.font-medium.text-gray-800');
+            const users = new Set();
+            userElements.forEach(el => {
+                const text = el.textContent.replace('User ', '');
+                if (text && text !== 'User') users.add(text);
+            });
+            
+            document.getElementById('checkins').textContent = checkins;
+            document.getElementById('checkouts').textContent = checkouts;
+            document.getElementById('uniqueUsers').textContent = users.size;
         }
-        // Optionally load all logs into allLogsBox if needed, but since priority is export, keep simple
+        
+        // Fetch all attendance from device
+        async function fetchAllAttendance() {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Fetching...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/fetch/all', { method: 'POST' });
+                const result = await response.json();
+                
+                showNotification(`Started fetching all attendance: ${result.commands_queued} commands queued`, 'success');
+                refreshQueue();
+                
+            } catch (error) {
+                showNotification('Error fetching attendance: ' + error.message, 'error');
+            } finally {
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }
+        
+        // Refresh live attendance
+        async function refreshLiveAttendance() {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Refreshing...';
+            
+            try {
+                const response = await fetch('/api/attendance/live');
+                const data = await response.json();
+                
+                const container = document.getElementById('liveAttendanceList');
+                
+                if (data.data.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-clock text-4xl mb-3"></i>
+                            <p class="font-medium">No attendance today yet</p>
+                            <p class="text-sm mt-1">Waiting for device data...</p>
+                        </div>
+                    `;
+                } else {
+                    let html = '';
+                    data.data.slice(-50).reverse().forEach(record => {
+                        // Safely extract time
+                        let displayTime = '';
+                        if (record.display_time) {
+                            displayTime = record.display_time;
+                        } else if (record.timestamp && record.timestamp.includes('T')) {
+                            const parts = record.timestamp.split('T');
+                            if (parts.length > 1) {
+                                displayTime = parts[1].substring(0, 8);
+                            }
+                        } else if (record.timestamp && record.timestamp.length > 11) {
+                            displayTime = record.timestamp.substring(11, 19);
+                        }
+                        
+                        const statusClass = record.status === '0' ? 'bg-green-100 text-green-800' :
+                                          record.status === '1' ? 'bg-red-100 text-red-800' :
+                                          'bg-gray-100 text-gray-800';
+                        
+                        html += `
+                            <div class="attendance-row">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <span class="font-medium text-gray-800">User ${record.user_id}</span>
+                                        <div class="text-xs text-gray-500 mt-1">${displayTime || 'Time unknown'}</div>
+                                    </div>
+                                    <div>
+                                        <span class="px-3 py-1 rounded-full text-xs font-bold ${statusClass}">
+                                            ${record.status_text}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="text-sm text-gray-600 mt-2 flex justify-between">
+                                    <span><i class="fas fa-key mr-1"></i>${record.verification || ''}</span>
+                                    <span><i class="fas fa-barcode mr-1"></i>${record.workcode || ''}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                }
+                
+                // Update counters
+                document.getElementById('liveRecordsCount').textContent = data.count;
+                updateStats();
+                updateLastUpdateTime();
+                
+            } catch (error) {
+                console.error('Error refreshing live attendance:', error);
+                showNotification('Error refreshing live attendance', 'error');
+            } finally {
+                btn.innerHTML = originalText;
+            }
+        }
+        
+        // Send command to device
+        async function sendCommand(command) {
+            try {
+                const response = await fetch('/api/command/send', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `command=${encodeURIComponent(command)}`
+                });
+                
+                const result = await response.json();
+                showNotification(`Command sent: ${result.command}`, 'success');
+                refreshQueue();
+                
+            } catch (error) {
+                showNotification('Error sending command: ' + error.message, 'error');
+            }
+        }
+        
+        // Refresh command queue
+        async function refreshQueue() {
+            try {
+                const response = await fetch('/api/command/queue');
+                const data = await response.json();
+                
+                const container = document.getElementById('commandQueue');
+                const countElement = document.getElementById('queueCount');
+                
+                countElement.textContent = `${data.count} commands`;
+                
+                if (data.queue.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-gray-500 italic text-center py-3">
+                            <i class="fas fa-inbox mr-2"></i>No commands in queue
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = data.queue.map(cmd => 
+                        `<div class="bg-blue-100 text-blue-800 px-3 py-2 rounded border border-blue-200">
+                            <i class="fas fa-arrow-right mr-2 text-xs"></i>${cmd}
+                        </div>`
+                    ).join('');
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing queue:', error);
+            }
+        }
+        
+        // Refresh logs
+        async function refreshLogs() {
+            try {
+                // In a real implementation, you'd fetch logs from an API
+                // For now, we'll just scroll to bottom
+                const logPanel = document.getElementById('logPanel');
+                logPanel.scrollTop = logPanel.scrollHeight;
+            } catch (error) {
+                console.error('Error refreshing logs:', error);
+            }
+        }
+        
+        // Clear logs
+        function clearLogs() {
+            if (confirm('Clear all logs?')) {
+                const logPanel = document.getElementById('logPanel');
+                logPanel.innerHTML = '<div class="text-gray-500 italic">Logs cleared</div>';
+            }
+        }
+        
+        // Update last update time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('lastUpdateTime').textContent = 
+                `${now.toLocaleDateString()} ${timeString}`;
+        }
+        
+        // Show notification
+        function showNotification(message, type = 'info') {
+            // Create notification element
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' :
+                type === 'error' ? 'bg-red-100 text-red-800 border border-red-200' :
+                'bg-blue-100 text-blue-800 border border-blue-200'
+            }`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} mr-3"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+        
+        // Auto-refresh queue every 5 seconds
+        setInterval(refreshQueue, 5000);
+        
+        // Auto-refresh live attendance every 15 seconds
+        setInterval(refreshLiveAttendance, 15000);
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStats();
+            updateLastUpdateTime();
+            
+            // Add initial logs
+            const logPanel = document.getElementById('logPanel');
+            if (logPanel.children.length === 0) {
+                logPanel.innerHTML = '<div class="text-gray-500 italic">System started...</div>';
+            }
+            
+            // Auto-scroll logs to bottom
+            logPanel.scrollTop = logPanel.scrollHeight;
+        });
     </script>
 </body>
 </html>

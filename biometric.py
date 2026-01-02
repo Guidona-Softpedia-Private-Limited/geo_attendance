@@ -1,344 +1,391 @@
 import os
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
-from datetime import datetime
-import asyncio
 import json
+import asyncio
+from datetime import datetime, timedelta
 from typing import List, Dict, Any
-import csv
-import io
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
-app = FastAPI()
+app = FastAPI(title="eSSL Attendance Fetcher")
 
-# ---------------- GLOBAL DATA STORAGE ----------------
-# Store device logs (persistent)
-LOGS: List[str] = []
-# Store all parsed attendance records (persistent)
-ATTENDANCE_DATA: List[Dict[str, Any]] = []
-# Display strings for recent attendance
-RECENT_ATTENDANCE_DISPLAY: List[str] = []
-# Command queue (limited to attendance-related commands)
-COMMAND_QUEUE: List[str] = []
-# Device information
-DEVICE_SN = "Unknown"
-DEVICE_INFO: Dict[str, str] = {}
-# Persistent storage files
+# ------------- CONFIGURATION -------------
 DATA_FILE = "attendance_data.json"
 LOG_FILE = "device_logs.txt"
-# Flags and status
-IS_FETCHING_ALL_LOGS = False
-DEVICE_CONNECTED = False
-LAST_DEVICE_CONTACT = None
 
-# ---------------- PERSISTENT STORAGE FUNCTIONS ----------------
+# ------------- DATA STORAGE -------------
+ATTENDANCE_RECORDS: List[Dict[str, Any]] = []
+LIVE_ATTENDANCE: List[Dict[str, Any]] = []
+DEVICE_INFO: Dict[str, str] = {"sn": "Unknown"}
+COMMAND_QUEUE: List[str] = []
+LOGS: List[str] = []
+
+# ------------- PERSISTENCE FUNCTIONS -------------
 def load_persistent_data():
-    """Load saved attendance and device data from files."""
-    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO
+    """Load previously saved attendance data"""
+    global ATTENDANCE_RECORDS, DEVICE_INFO
+    
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, 'r') as f:
                 data = json.load(f)
-                ATTENDANCE_DATA = data.get('attendance', [])
-                DEVICE_SN = data.get('device_sn', "Unknown")
-                DEVICE_INFO = data.get('device_info', {})
-                print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records")
+                ATTENDANCE_RECORDS = data.get('attendance', [])
+                DEVICE_INFO = data.get('device_info', {"sn": "Unknown"})
+                print(f"📂 Loaded {len(ATTENDANCE_RECORDS)} attendance records")
+                update_live_attendance()
     except Exception as e:
-        print(f"⚠️ Error loading attendance data: {e}")
-
-    try:
-        if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
-                LOGS = [line.strip() for line in f.readlines() if line.strip()]
-                print(f"📂 Loaded {len(LOGS)} log entries")
-    except Exception as e:
-        print(f"⚠️ Error loading logs: {e}")
-
-    update_recent_attendance_display()
+        print(f"⚠️ Error loading data: {e}")
 
 def save_persistent_data():
-    """Save attendance and device data to files."""
+    """Save attendance data to disk"""
     try:
         data = {
-            'attendance': ATTENDANCE_DATA,
-            'device_sn': DEVICE_SN,
+            'attendance': ATTENDANCE_RECORDS,
             'device_info': DEVICE_INFO,
             'last_updated': datetime.now().isoformat()
         }
         with open(DATA_FILE, 'w') as f:
             json.dump(data, f, indent=2)
     except Exception as e:
-        print(f"⚠️ Error saving attendance data: {e}")
+        print(f"⚠️ Error saving data: {e}")
 
-    try:
-        # Limit logs to last 5000 to prevent file growth
-        logs_to_save = LOGS[-5000:]
-        with open(LOG_FILE, 'w') as f:
-            for log_entry in logs_to_save:
-                f.write(log_entry + "\n")
-    except Exception as e:
-        print(f"⚠️ Error saving logs: {e}")
-
-def update_recent_attendance_display():
-    """Update display list for recent attendance (last 100 records)."""
-    global RECENT_ATTENDANCE_DISPLAY
-    RECENT_ATTENDANCE_DISPLAY = [
-        f"{r.get('user_id', 'N/A')}\t{r.get('timestamp', 'N/A')}\t{r.get('status', 'N/A')}\t{r.get('verification', 'N/A')}\t{r.get('workcode', 'N/A')}"
-        for r in ATTENDANCE_DATA[-100:]
-    ]
-
-# ---------------- LOGGING AND PARSING FUNCTIONS ----------------
-def log(msg: str):
-    """Add timestamped log entry and save periodically."""
-    ts = f"{datetime.now().isoformat()}Z - {msg}"
-    print(ts)
-    LOGS.append(ts)
-    if len(LOGS) % 10 == 0:
-        save_persistent_data()
-
-def parse_attendance_line(line: str) -> Dict[str, Any]:
-    """Parse tab-separated attendance line into a dictionary."""
-    parts = line.split('\t')
-    if len(parts) < 3:
-        return {}
-
-    record = {
-        'user_id': parts[0],
-        'timestamp': parts[1],
-        'status': parts[2],
-        'verification': parts[3] if len(parts) > 3 else '',
-        'workcode': parts[4] if len(parts) > 4 else '',
-        'received_at': datetime.utcnow().isoformat(),
-        'raw': line
-    }
-
-    status_map = {
-        '0': 'Check-in', '1': 'Check-out', '2': 'Break-out', '3': 'Break-in',
-        '4': 'Overtime-in', '5': 'Overtime-out', '255': 'Error'
-    }
-    record['status_text'] = status_map.get(record['status'], 'Unknown')
-
-    return record
-
-# ---------------- BACKGROUND TASKS ----------------
-async def auto_send_commands():
-    """Periodically queue 'GET ATTLOG ALL' if device is active and queue is empty."""
-    while True:
+def update_live_attendance():
+    """Update live attendance with records from last 24 hours"""
+    global LIVE_ATTENDANCE
+    
+    now = datetime.now()
+    live_cutoff = now - timedelta(hours=24)
+    
+    LIVE_ATTENDANCE.clear()
+    for record in ATTENDANCE_RECORDS:
         try:
-            if LAST_DEVICE_CONTACT and (datetime.now() - LAST_DEVICE_CONTACT).total_seconds() < 300:
-                if not COMMAND_QUEUE:
-                    COMMAND_QUEUE.append("GET ATTLOG ALL")
-                    log("🔄 Auto-queued GET ATTLOG ALL")
-            await asyncio.sleep(30)
+            # Try to parse timestamp - handle different formats
+            timestamp_str = record.get('timestamp', '')
+            if 'T' in timestamp_str:
+                # ISO format: 2024-01-01T12:34:56
+                record_time = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            elif len(timestamp_str) >= 19:
+                # Common format: 2024-01-01 12:34:56
+                record_time = datetime.strptime(timestamp_str[:19], "%Y-%m-%d %H:%M:%S")
+            else:
+                continue
+                
+            if record_time >= live_cutoff:
+                LIVE_ATTENDANCE.append(record)
         except Exception as e:
-            log(f"⚠️ Error in auto_send_commands: {e}")
-            await asyncio.sleep(60)
-
-async def periodic_save():
-    """Save data every 60 seconds."""
-    while True:
-        await asyncio.sleep(60)
-        save_persistent_data()
-
-async def check_device_status():
-    """Monitor device connection status."""
-    global DEVICE_CONNECTED
-    while True:
-        await asyncio.sleep(30)
-        if LAST_DEVICE_CONTACT and (datetime.utcnow() - LAST_DEVICE_CONTACT).total_seconds() > 120:
-            if DEVICE_CONNECTED:
-                DEVICE_CONNECTED = False
-                log("⚠️ Device connection lost")
-
-@app.on_event("startup")
-async def startup_event():
-    """Load data and start background tasks on startup."""
-    load_persistent_data()
-    asyncio.create_task(auto_send_commands())
-    asyncio.create_task(periodic_save())
-    asyncio.create_task(check_device_status())
-    log("🚀 Simplified eSSL Probe Started - Focus: All Attendance Logs")
-
-# ---------------- UI ROUTES ----------------
-templates = Jinja2Templates(directory="templates")
-
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
-    """Render simplified dashboard with live and all attendance cards."""
-    today = datetime.utcnow().date()
-    today_records = len([r for r in ATTENDANCE_DATA if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))])
-    unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
-
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "logs": LOGS[-100:],
-            "recent_attendance": RECENT_ATTENDANCE_DISPLAY,
-            "device_sn": DEVICE_SN,
-            "total_records": len(ATTENDANCE_DATA),
-            "today_records": today_records,
-            "unique_users": unique_users,
-            "fetching_all": IS_FETCHING_ALL_LOGS,
-            "device_connected": DEVICE_CONNECTED
-        }
-    )
-
-@app.get("/get_logs")
-async def get_logs():
-    """AJAX endpoint for updating UI data."""
-    today = datetime.utcnow().date()
-    today_records = len([r for r in ATTENDANCE_DATA if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))])
-    unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
-
-    return {
-        "logs": LOGS[-100:],
-        "recent_attendance": RECENT_ATTENDANCE_DISPLAY,
-        "attendance_count": len(ATTENDANCE_DATA),
-        "today_count": today_records,
-        "unique_users": unique_users,
-        "device_sn": DEVICE_SN,
-        "fetching_all": IS_FETCHING_ALL_LOGS,
-        "device_connected": DEVICE_CONNECTED
-    }
-
-@app.get("/force_fetch_all")
-async def force_fetch_all():
-    """Queue commands to force fetch all attendance logs."""
-    global COMMAND_QUEUE, IS_FETCHING_ALL_LOGS
-    COMMAND_QUEUE = ["GET ATTLOG ALL"]
-    IS_FETCHING_ALL_LOGS = True
-    log("🚨 Force Fetch All Attendance Logs Queued")
-    return PlainTextResponse("Force fetch initiated.")
-
-# ---------------- DEVICE ENDPOINTS ----------------
-async def log_request(request: Request, body: str):
-    """Log incoming device request details."""
-    global DEVICE_CONNECTED, LAST_DEVICE_CONTACT
-    DEVICE_CONNECTED = True
-    LAST_DEVICE_CONTACT = datetime.utcnow()
-
-    log(f"DEVICE REQUEST: {request.url.path} from {request.client.host}")
-    log(f"QUERY: {dict(request.query_params)}")
-    log(f"BODY: {body[:500] + '...' if len(body) > 500 else body or '<empty>'}")
-
-@app.api_route("/iclock/cdata.aspx", methods=["GET", "POST"])
-async def iclock_cdata(request: Request):
-    """Handle data pushes from device (attendance logs)."""
-    body = (await request.body()).decode(errors="ignore")
-    await log_request(request, body)
-
-    if request.method == "GET":
-        return PlainTextResponse("OK")
-
-    lines = body.splitlines()
-    attendance_count = 0
-
-    for line in lines:
-        line = line.strip()
-        if not line:
             continue
 
-        if "SN=" in line.upper():
-            global DEVICE_SN
-            DEVICE_SN = line.split("=")[1].strip()
-            DEVICE_INFO['sn'] = DEVICE_SN
-            log(f"📱 Device SN: {DEVICE_SN}")
+# ------------- ATTENDANCE PARSING -------------
+def parse_attendance_line(line: str) -> Dict[str, Any]:
+    """
+    Parse attendance line format:
+    USER_ID\tTIMESTAMP\tSTATUS\tVERIFICATION\tWORKCODE
+    """
+    parts = line.split('\t')
+    if len(parts) < 3:
+        return None
+    
+    record = {
+        'user_id': parts[0].strip(),
+        'timestamp': parts[1].strip(),
+        'status': parts[2].strip(),
+        'verification': parts[3].strip() if len(parts) > 3 else '',
+        'workcode': parts[4].strip() if len(parts) > 4 else '',
+        'received_at': datetime.now().isoformat()
+    }
+    
+    # Clean timestamp - ensure consistent format
+    timestamp = record['timestamp']
+    if ' ' in timestamp and 'T' not in timestamp:
+        # Convert "2024-01-01 12:34:56" to "2024-01-01T12:34:56"
+        record['timestamp'] = timestamp.replace(' ', 'T')
+    
+    # Status mapping
+    status_map = {
+        '0': 'Check-in',
+        '1': 'Check-out',
+        '2': 'Break-out',
+        '3': 'Break-in',
+        '4': 'Overtime-in',
+        '5': 'Overtime-out',
+        '255': 'Error'
+    }
+    record['status_text'] = status_map.get(record['status'], 'Unknown')
+    
+    # Format time for display
+    try:
+        if 'T' in record['timestamp']:
+            time_parts = record['timestamp'].split('T')
+            record['display_date'] = time_parts[0]
+            record['display_time'] = time_parts[1][:8] if len(time_parts) > 1 else ''
+        else:
+            record['display_date'] = record['timestamp'][:10]
+            record['display_time'] = record['timestamp'][11:19] if len(record['timestamp']) > 19 else ''
+    except:
+        record['display_date'] = record['timestamp'][:10]
+        record['display_time'] = ''
+    
+    return record
 
-        elif '\t' in line:
-            record = parse_attendance_line(line)
-            if record:
-                record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
-                if not any(f"{r.get('user_id')}_{r.get('timestamp')}_{r.get('status')}" == record_key for r in ATTENDANCE_DATA):
-                    ATTENDANCE_DATA.append(record)
-                    attendance_count += 1
-                    log(f"✅ New Attendance: User {record['user_id']} at {record['timestamp']}")
+def is_duplicate_record(record: Dict[str, Any]) -> bool:
+    """Check if attendance record already exists"""
+    record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
+    
+    for existing in ATTENDANCE_RECORDS:
+        existing_key = f"{existing['user_id']}_{existing['timestamp']}_{existing['status']}"
+        if existing_key == record_key:
+            return True
+    return False
+
+# ------------- LOGGING -------------
+def log(message: str):
+    """Add timestamped log entry"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"[{timestamp}] {message}"
+    LOGS.append(log_entry)
+    print(log_entry)
+    
+    if len(LOGS) > 1000:
+        LOGS.pop(0)
+
+# ------------- DEVICE COMMUNICATION -------------
+async def handle_device_data(body: str):
+    """
+    Process data received from biometric device
+    """
+    lines = [line.strip() for line in body.splitlines() if line.strip()]
+    new_records_count = 0
+    
+    for line in lines:
+        # Check for device info
+        if 'SN=' in line.upper():
+            sn_part = line.upper().split('SN=')[-1].split()[0] if 'SN=' in line.upper() else line
+            DEVICE_INFO['sn'] = sn_part
+            log(f"📱 Device SN: {sn_part}")
+            save_persistent_data()
+            continue
+            
+        # Parse attendance line
+        record = parse_attendance_line(line)
+        
+        if record and not is_duplicate_record(record):
+            ATTENDANCE_RECORDS.append(record)
+            new_records_count += 1
+            
+            # Add to live attendance if recent
+            try:
+                timestamp = record['timestamp']
+                if 'T' in timestamp:
+                    record_time = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                 else:
-                    log("⚠️ Duplicate attendance skipped")
-
-    if attendance_count > 0:
-        update_recent_attendance_display()
+                    record_time = datetime.strptime(timestamp[:19], "%Y-%m-%d %H:%M:%S")
+                    
+                if record_time >= datetime.now() - timedelta(hours=24):
+                    LIVE_ATTENDANCE.append(record)
+            except:
+                pass
+                
+            log(f"✓ {record['status_text']}: User {record['user_id']} at {record['display_time']}")
+    
+    if new_records_count > 0:
         save_persistent_data()
-        log(f"🎉 Added {attendance_count} new records (Total: {len(ATTENDANCE_DATA)})")
+        log(f"📊 Added {new_records_count} new records (Total: {len(ATTENDANCE_RECORDS)})")
+    
+    return new_records_count
 
+async def auto_fetch_attendance():
+    """Automatically send commands to fetch all attendance"""
+    while True:
+        try:
+            if len(COMMAND_QUEUE) == 0:
+                COMMAND_QUEUE.append("GET ATTLOG ALL")
+                log("🔄 Auto-queued: GET ATTLOG ALL")
+            
+            await asyncio.sleep(30)
+            
+        except Exception as e:
+            log(f"⚠️ Auto-fetch error: {e}")
+            await asyncio.sleep(60)
+
+# ------------- FASTAPI ROUTES -------------
+
+@app.post("/iclock/cdata.aspx")
+async def device_data_endpoint(request: Request):
+    """Main endpoint for device to send attendance data"""
+    body = (await request.body()).decode('utf-8', errors='ignore')
+    
+    log(f"📥 Received {len(body)} chars from device")
+    
+    # Process the data
+    new_records = await handle_device_data(body)
+    
     return PlainTextResponse("OK")
 
 @app.get("/iclock/getrequest.aspx")
-async def iclock_getrequest(request: Request):
-    """Handle command pulls from device."""
+async def device_command_endpoint(request: Request):
+    """Device pulls commands from here"""
     sn = request.query_params.get("SN", "")
     if sn:
-        global DEVICE_SN
-        DEVICE_SN = sn
-        DEVICE_INFO['sn'] = DEVICE_SN
-        log(f"📱 Device SN: {DEVICE_SN}")
-
-    await log_request(request, "")
-
+        DEVICE_INFO['sn'] = sn
+        log(f"📱 Device SN: {sn}")
+    
     if COMMAND_QUEUE:
         command = COMMAND_QUEUE.pop(0)
-        log(f"📤 Sending Command: {command}")
+        log(f"📤 Sending to device: {command}")
+        
+        # Auto-add next fetch command
+        if "ATTLOG" in command:
+            async def add_next_command():
+                await asyncio.sleep(2)
+                if len(COMMAND_QUEUE) == 0:
+                    COMMAND_QUEUE.append("GET ATTLOG ALL")
+                    log("🔄 Auto-added next GET ATTLOG ALL")
+            
+            asyncio.create_task(add_next_command())
+        
         return PlainTextResponse(command)
-
-    log("📤 No commands, default: GET ATTLOG ALL")
-    return PlainTextResponse("GET ATTLOG ALL")
+    
+    return PlainTextResponse("GET ATTLOG")
 
 @app.get("/iclock/registry.aspx")
-async def iclock_registry(request: Request):
-    """Handle device registration."""
-    await log_request(request, "")
+async def device_registration(request: Request):
+    """Device registration endpoint"""
     for key, value in request.query_params.items():
-        if key.upper() == "SN":
-            global DEVICE_SN
-            DEVICE_SN = value
-            DEVICE_INFO['sn'] = DEVICE_SN
-            log(f"📱 Registered Device SN: {DEVICE_SN}")
         DEVICE_INFO[key] = value
-
+        log(f"📝 Registration: {key}={value}")
+    
     save_persistent_data()
     return PlainTextResponse("OK")
 
-@app.post("/iclock/devicecmd.aspx")
-async def iclock_devicecmd(request: Request):
-    """Handle command responses from device."""
-    body = (await request.body()).decode(errors="ignore")
-    await log_request(request, body)
+@app.get("/", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Main dashboard"""
+    # Prepare data for template
+    all_records = ATTENDANCE_RECORDS[-100:]  # Last 100 records for preview
+    live_records = LIVE_ATTENDANCE[-50:]  # Last 50 live records
+    
+    # Format timestamps for display
+    for record in all_records + live_records:
+        if 'display_time' not in record:
+            timestamp = record.get('timestamp', '')
+            if 'T' in timestamp:
+                parts = timestamp.split('T')
+                record['display_date'] = parts[0]
+                record['display_time'] = parts[1][:8] if len(parts) > 1 else timestamp
+            else:
+                record['display_date'] = timestamp[:10]
+                record['display_time'] = timestamp[11:19] if len(timestamp) > 19 else timestamp
+    
+    return templates.TemplateResponse("dashboard.html", {
+        "request": request,
+        "total_records": len(ATTENDANCE_RECORDS),
+        "live_records": len(LIVE_ATTENDANCE),
+        "device_sn": DEVICE_INFO.get('sn', 'Unknown'),
+        "attendance_records": all_records,
+        "live_attendance": live_records,
+        "command_queue": COMMAND_QUEUE,
+        "logs": LOGS[-50:],
+        "now": datetime.now()
+    })
 
-    if "=" in body:
-        for line in body.splitlines():
-            if '=' in line:
-                try:
-                    key, value = line.split('=', 1)
-                    DEVICE_INFO[key.strip()] = value.strip()
-                    log(f"⚙️ Device Info: {key.strip()} = {value.strip()}")
-                except:
-                    pass
+@app.get("/api/attendance/all")
+async def get_all_attendance():
+    """API endpoint for all attendance records"""
+    return {
+        "count": len(ATTENDANCE_RECORDS),
+        "data": ATTENDANCE_RECORDS[-1000:],
+        "device": DEVICE_INFO
+    }
 
-    save_persistent_data()
-    return PlainTextResponse("OK")
+@app.get("/api/attendance/live")
+async def get_live_attendance():
+    """API endpoint for live attendance"""
+    return {
+        "count": len(LIVE_ATTENDANCE),
+        "data": LIVE_ATTENDANCE,
+        "last_updated": datetime.now().isoformat()
+    }
 
-# ---------------- UTILITY ENDPOINTS ----------------
-@app.get("/export_attendance")
-async def export_attendance():
-    """Export all attendance data as CSV."""
-    if not ATTENDANCE_DATA:
-        return PlainTextResponse("No attendance data")
+@app.get("/api/command/queue")
+async def get_command_queue():
+    """Get current command queue"""
+    return {
+        "queue": COMMAND_QUEUE,
+        "count": len(COMMAND_QUEUE)
+    }
 
-    output = io.StringIO()
+@app.post("/api/command/send")
+async def send_command(command: str = "GET ATTLOG ALL"):
+    """Send a command to the device"""
+    COMMAND_QUEUE.append(command)
+    log(f"✅ Queued command: {command}")
+    return {"status": "queued", "command": command}
+
+@app.post("/api/fetch/all")
+async def fetch_all_attendance():
+    """Force fetch all attendance records from device"""
+    COMMAND_QUEUE.clear()
+    COMMAND_QUEUE.extend([
+        "GET ATTLOG ALL",
+        "GET ATTLOG ALL",  # Send twice to ensure complete fetch
+        "DATA",
+        "TRAN DATA"
+    ])
+    
+    log("🚀 FORCE FETCH: Queued commands to get ALL attendance")
+    return {
+        "status": "started",
+        "message": "Fetching all attendance records from device",
+        "commands_queued": len(COMMAND_QUEUE)
+    }
+
+@app.get("/api/export/csv")
+async def export_attendance_csv():
+    """Export attendance data as CSV"""
+    import csv
+    from io import StringIO
+    
+    output = StringIO()
     writer = csv.writer(output)
-    writer.writerow(["User ID", "Timestamp", "Status", "Status Text", "Verification", "Workcode", "Received At"])
-
-    for record in ATTENDANCE_DATA:
+    
+    writer.writerow(["User ID", "Date", "Time", "Status", "Status Text", "Verification", "Workcode"])
+    
+    for record in ATTENDANCE_RECORDS:
+        timestamp = record.get('timestamp', '')
+        date = timestamp[:10] if timestamp else ''
+        time = timestamp[11:19] if len(timestamp) > 19 else ''
+        
         writer.writerow([
-            record.get('user_id', ''), record.get('timestamp', ''), record.get('status', ''),
-            record.get('status_text', ''), record.get('verification', ''), record.get('workcode', ''),
-            record.get('received_at', '')
+            record['user_id'],
+            date,
+            time,
+            record['status'],
+            record.get('status_text', ''),
+            record['verification'],
+            record['workcode']
         ])
-
+    
     content = output.getvalue()
-    filename = f"all_attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-
+    filename = f"attendance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
     return PlainTextResponse(
         content,
-        headers={"Content-Disposition": f"attachment; filename={filename}", "Content-Type": "text/csv"}
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Type": "text/csv"
+        }
     )
+
+@app.on_event("startup")
+async def startup():
+    """Initialize application"""
+    load_persistent_data()
+    asyncio.create_task(auto_fetch_attendance())
+    
+    log("🚀 eSSL Attendance Fetcher Started")
+    log(f"📊 Loaded {len(ATTENDANCE_RECORDS)} existing records")
+    log(f"📱 Device SN: {DEVICE_INFO.get('sn', 'Unknown')}")
+
+# Setup templates
+templates = Jinja2Templates(directory="templates")
