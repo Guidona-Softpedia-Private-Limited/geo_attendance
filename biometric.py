@@ -23,7 +23,6 @@ ATTENDANCE_FILE = DATA_DIR / "attendance_data.json"
 DEVICES_FILE = DATA_DIR / "devices.json"
 RAW_DATA_FILE = DATA_DIR / "raw_data.json"
 SYSTEM_LOGS_FILE = DATA_DIR / "system_logs.json"
-DEVICE_STATUS_FILE = DATA_DIR / "device_status_settings.json"
 
 # ------------- DATA STORAGE -------------
 DEVICES: Dict[str, Dict[str, Any]] = {}  # device_sn -> device_info
@@ -31,14 +30,13 @@ ATTENDANCE_RECORDS: List[Dict[str, Any]] = []
 RAW_DATA_STORE: List[Dict[str, Any]] = []  # Store all raw communications
 SYSTEM_LOGS: List[str] = []
 COMMAND_QUEUE: Dict[str, List[str]] = defaultdict(list)  # device_sn -> commands
-DEVICE_STATUS_SETTINGS: Dict[str, str] = {}  # device_sn -> default status
 TOTAL_DATA_BYTES: int = 0
 TOTAL_COMMUNICATIONS: int = 0
 
 # ------------- PERSISTENCE FUNCTIONS -------------
 def load_all_data():
     """Load all data from files"""
-    global DEVICES, ATTENDANCE_RECORDS, RAW_DATA_STORE, SYSTEM_LOGS, TOTAL_DATA_BYTES, TOTAL_COMMUNICATIONS, DEVICE_STATUS_SETTINGS
+    global DEVICES, ATTENDANCE_RECORDS, RAW_DATA_STORE, SYSTEM_LOGS, TOTAL_DATA_BYTES, TOTAL_COMMUNICATIONS
     
     try:
         # Load attendance data
@@ -69,12 +67,6 @@ def load_all_data():
             with open(SYSTEM_LOGS_FILE, 'r') as f:
                 logs_data = json.load(f)
                 SYSTEM_LOGS = logs_data.get('logs', [])[-1000:]
-        
-        # Load device status settings
-        if DEVICE_STATUS_FILE.exists():
-            with open(DEVICE_STATUS_FILE, 'r') as f:
-                DEVICE_STATUS_SETTINGS = json.load(f)
-                print(f"⚙️ Loaded status settings for {len(DEVICE_STATUS_SETTINGS)} devices")
         
     except Exception as e:
         print(f"⚠️ Error loading data: {e}")
@@ -120,11 +112,7 @@ def save_all_data():
         with open(SYSTEM_LOGS_FILE, 'w') as f:
             json.dump(logs_data, f, indent=2)
         
-        # Save device status settings
-        with open(DEVICE_STATUS_FILE, 'w') as f:
-            json.dump(DEVICE_STATUS_SETTINGS, f, indent=2)
-        
-        print(f"💾 Data saved: {len(DEVICES)} devices, {len(ATTENDANCE_RECORDS)} records, {len(DEVICE_STATUS_SETTINGS)} status settings")
+        print(f"💾 Data saved: {len(DEVICES)} devices, {len(ATTENDANCE_RECORDS)} records")
         
     except Exception as e:
         print(f"⚠️ Error saving data: {e}")
@@ -146,10 +134,7 @@ def get_or_create_device(device_sn: str, client_ip: str = "") -> Dict[str, Any]:
                     device_name = parts[0]
                 else:
                     device_name = device_sn
-        
-        # Get default status from settings or use check-in (0)
-        default_status = DEVICE_STATUS_SETTINGS.get(device_sn, '0')
-        
+            
         DEVICES[device_sn] = {
             'sn': device_sn,
             'first_seen': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -160,8 +145,7 @@ def get_or_create_device(device_sn: str, client_ip: str = "") -> Dict[str, Any]:
             'records_count': 0,
             'comms_count': 0,
             'params': {},
-            'status': 'new',
-            'default_status': default_status
+            'status': 'new'
         }
         log(f"🆕 New device detected: {device_sn} ({device_name}) from {client_ip}")
     
@@ -179,10 +163,6 @@ def update_device_last_seen(device_sn: str, client_ip: str = ""):
         
         # Update device status
         device['status'] = 'online'
-        
-        # Update default status from settings
-        if device_sn in DEVICE_STATUS_SETTINGS:
-            device['default_status'] = DEVICE_STATUS_SETTINGS[device_sn]
 
 def get_client_ip(request: Request) -> str:
     """Get client IP address"""
@@ -246,68 +226,25 @@ def store_raw_data(device_sn: str, raw_body: str, direction: str = "INCOMING",
     
     return data_hash
 
-# ------------- DEVICE STATUS SETTINGS -------------
-def update_device_status_setting(device_sn: str, status: str):
-    """Update device default status setting"""
-    DEVICE_STATUS_SETTINGS[device_sn] = status
-    
-    # Update device record if exists
-    if device_sn in DEVICES:
-        DEVICES[device_sn]['default_status'] = status
-    
-    # Save settings
-    try:
-        with open(DEVICE_STATUS_FILE, 'w') as f:
-            json.dump(DEVICE_STATUS_SETTINGS, f, indent=2)
-        log(f"⚙️ Updated device {device_sn} default status to: {status}")
-    except Exception as e:
-        print(f"Error saving device status settings: {e}")
-
-def get_status_text(status_code: str) -> str:
-    """Convert status code to text"""
-    status_map = {
-        '0': 'Check-in',
-        '1': 'Check-out',
-        '2': 'Break-out',
-        '3': 'Break-in',
-        '4': 'Overtime-in',
-        '5': 'Overtime-out',
-        '6': 'Check-in (Override)',
-        '7': 'Check-out (Override)',
-        '8': 'Manual Check-in',
-        '9': 'Manual Check-out',
-        '10': 'Door Open',
-        '11': 'Door Close',
-        '12': 'Access Granted',
-        '13': 'Access Denied',
-        '14': 'Alarm On',
-        '15': 'Alarm Off',
-        '255': 'Error'
-    }
-    return status_map.get(status_code, f"Status-{status_code}")
-
 # ------------- DATA PARSING -------------
-def parse_device_body(raw_body: str, device_sn: str = "") -> Tuple[str, List[Dict]]:
+def parse_device_body(raw_body: str) -> Tuple[str, List[Dict]]:
     """
     Parse eSSL device body and extract:
     1. Device SN (from body or headers)
     2. Attendance records
     """
-    device_sn_from_body = "UNKNOWN"
+    device_sn = "UNKNOWN"
     records = []
     
     # Try to find SN in body
     lines = [line.strip() for line in raw_body.splitlines() if line.strip()]
-    
-    # Get default status for this device
-    default_status = DEVICE_STATUS_SETTINGS.get(device_sn, '0') if device_sn else '0'
     
     for line in lines:
         # Look for SN= pattern
         if 'SN=' in line.upper():
             parts = line.split('=')
             if len(parts) >= 2:
-                device_sn_from_body = parts[1].strip().split()[0] if ' ' in parts[1] else parts[1].strip()
+                device_sn = parts[1].strip().split()[0] if ' ' in parts[1] else parts[1].strip()
                 break
         
         # Look for tab-separated attendance data
@@ -315,21 +252,14 @@ def parse_device_body(raw_body: str, device_sn: str = "") -> Tuple[str, List[Dic
             parts = line.split('\t')
             if len(parts) >= 3:
                 try:
-                    # Use device's default status if status field is empty or check-in
-                    status = parts[2].strip()
-                    if status == '0' and device_sn:  # If status is check-in (0)
-                        # Apply device's default status setting
-                        status = DEVICE_STATUS_SETTINGS.get(device_sn, '0')
-                    
                     record = {
                         'user_id': parts[0].strip(),
                         'timestamp': parts[1].strip(),
-                        'status': status,
+                        'status': parts[2].strip(),
                         'verification': parts[3].strip() if len(parts) > 3 else '',
                         'workcode': parts[4].strip() if len(parts) > 4 else '',
                         'raw_line': line,
-                        'received_at': datetime.now().isoformat(),
-                        'original_status': parts[2].strip()  # Store original status
+                        'received_at': datetime.now().isoformat()
                     }
                     
                     # Parse timestamp
@@ -338,7 +268,26 @@ def parse_device_body(raw_body: str, device_sn: str = "") -> Tuple[str, List[Dic
                         record['timestamp'] = timestamp.replace(' ', 'T')
                     
                     # Extended Status mapping for eSSL devices
-                    record['status_text'] = get_status_text(record['status'])
+                    status_map = {
+                        '0': 'Check-in',
+                        '1': 'Check-out',
+                        '2': 'Break-out',
+                        '3': 'Break-in',
+                        '4': 'Overtime-in',
+                        '5': 'Overtime-out',
+                        '6': 'Check-in (Override)',
+                        '7': 'Check-out (Override)',
+                        '8': 'Manual Check-in',
+                        '9': 'Manual Check-out',
+                        '10': 'Door Open',
+                        '11': 'Door Close',
+                        '12': 'Access Granted',
+                        '13': 'Access Denied',
+                        '14': 'Alarm On',
+                        '15': 'Alarm Off',
+                        '255': 'Error'
+                    }
+                    record['status_text'] = status_map.get(record['status'], f"Status-{record['status']}")
                     
                     # Format for display
                     if 'T' in record['timestamp']:
@@ -354,7 +303,7 @@ def parse_device_body(raw_body: str, device_sn: str = "") -> Tuple[str, List[Dic
                 except Exception as e:
                     log(f"Error parsing attendance line: {e}", "ERROR")
     
-    return device_sn_from_body, records
+    return device_sn, records
 
 def extract_device_info_from_query(params: Dict) -> Dict:
     """Extract device info from query parameters"""
@@ -436,8 +385,8 @@ async def handle_device_request(request: Request, endpoint: str = ""):
         device['params'].update(device_info)
         device['params']['last_updated'] = datetime.now().isoformat()
     
-    # Parse attendance records from body (pass device_sn to apply status settings)
-    _, records = parse_device_body(raw_body, device_sn)
+    # Parse attendance records from body
+    _, records = parse_device_body(raw_body)
     
     # Add records to database
     new_records = 0
@@ -458,12 +407,7 @@ async def handle_device_request(request: Request, endpoint: str = ""):
             ATTENDANCE_RECORDS.append(record)
             device['records_count'] += 1
             new_records += 1
-            
-            # Log if status was changed from default check-in
-            if record.get('original_status') == '0' and record['status'] != '0':
-                log(f"⚙️ Status overridden for {device_sn}: User {record['user_id']} → {get_status_text(record['status'])}")
-            else:
-                log(f"✓ {record['status_text']}: User {record['user_id']} on {device_sn}")
+            log(f"✓ {record['status_text']}: User {record['user_id']} on {device_sn}")
     
     # Update raw data entry with device SN
     for entry in RAW_DATA_STORE[-10:]:  # Update recent entries
@@ -563,9 +507,6 @@ async def dashboard(request: Request):
     for device in DEVICES.values():
         last_seen = datetime.strptime(device['last_seen'], "%Y-%m-%d %H:%M:%S")
         device['last_seen_seconds'] = (datetime.now() - last_seen).total_seconds()
-        
-        # Add default status setting to device data
-        device['default_status'] = DEVICE_STATUS_SETTINGS.get(device['sn'], '0')
     
     # Get recent raw data (last 20)
     recent_raw = []
@@ -610,8 +551,7 @@ async def get_devices():
     return JSONResponse({
         "devices": DEVICES,
         "count": len(DEVICES),
-        "online": len([d for d in DEVICES.values() if d['last_seen_seconds'] < 300]),
-        "status_settings": DEVICE_STATUS_SETTINGS
+        "online": len([d for d in DEVICES.values() if d['last_seen_seconds'] < 300])
     })
 
 @app.get("/api/device/{device_sn}")
@@ -624,32 +564,7 @@ async def get_device(device_sn: str):
     last_seen = datetime.strptime(device['last_seen'], "%Y-%m-%d %H:%M:%S")
     device['last_seen_seconds'] = (datetime.now() - last_seen).total_seconds()
     
-    # Add status setting
-    device['default_status'] = DEVICE_STATUS_SETTINGS.get(device_sn, '0')
-    
     return JSONResponse(device)
-
-@app.post("/api/device/{device_sn}/status")
-async def update_device_status(device_sn: str, status: str = Form(...)):
-    """Update device default status setting"""
-    if status not in ['0', '1', '2', '3', '4', '5', '8', '9']:
-        raise HTTPException(status_code=400, detail="Invalid status code")
-    
-    update_device_status_setting(device_sn, status)
-    
-    # Update device record if exists
-    if device_sn in DEVICES:
-        DEVICES[device_sn]['default_status'] = status
-    
-    log(f"⚙️ Device {device_sn} status updated to: {get_status_text(status)} ({status})")
-    save_all_data()
-    
-    return JSONResponse({
-        "status": "updated",
-        "device_sn": device_sn,
-        "new_status": status,
-        "status_text": get_status_text(status)
-    })
 
 @app.get("/api/device/{device_sn}/raw-data")
 async def get_device_raw_data(device_sn: str, limit: int = 50):
@@ -825,7 +740,7 @@ async def export_attendance_csv():
     writer = csv.writer(output)
     
     writer.writerow(["Device SN", "Device Name", "User ID", "Date", "Time", 
-                     "Status", "Status Text", "Verification", "Workcode", "Received At", "Original Status"])
+                     "Status", "Status Text", "Verification", "Workcode", "Received At"])
     
     for record in ATTENDANCE_RECORDS[-10000:]:  # Last 10k records
         timestamp = record.get('timestamp', '')
@@ -842,8 +757,7 @@ async def export_attendance_csv():
             record.get('status_text', ''),
             record['verification'],
             record['workcode'],
-            record.get('received_at', ''),
-            record.get('original_status', '')
+            record.get('received_at', '')
         ])
     
     content = output.getvalue()
@@ -863,11 +777,10 @@ async def startup():
     """Initialize application"""
     load_all_data()
     
-    log("🚀 eSSL Multi-Device Monitor v2.3 Started")
+    log("🚀 eSSL Multi-Device Monitor v2.1 Started")
     log(f"📱 Loaded {len(DEVICES)} devices")
     log(f"📊 Loaded {len(ATTENDANCE_RECORDS)} attendance records")
     log(f"📨 Total communications: {TOTAL_COMMUNICATIONS} ({TOTAL_DATA_BYTES} bytes)")
-    log(f"⚙️ Loaded status settings for {len(DEVICE_STATUS_SETTINGS)} devices")
 
 # Setup templates
 templates = Jinja2Templates(directory="templates")
