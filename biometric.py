@@ -24,9 +24,6 @@ ATTENDANCE_DATA: List[Dict[str, Any]] = []
 RAW_DATA_STORE: List[Dict[str, Any]] = []
 # Command queue
 COMMAND_QUEUE: List[str] = []
-# Device information
-DEVICE_SN = "Unknown"
-DEVICE_INFO: Dict[str, str] = {}
 # Multiple devices support
 DEVICES: List[Dict[str, Any]] = []
 
@@ -45,7 +42,7 @@ LAST_DEVICE_CONTACT = None
 
 def load_persistent_data():
     """Load previously saved data from files"""
-    global ATTENDANCE_DATA, LOGS, DEVICE_SN, DEVICE_INFO, RAW_DATA_STORE, DEVICES
+    global ATTENDANCE_DATA, LOGS, RAW_DATA_STORE, DEVICES
     
     try:
         # Load attendance data
@@ -53,8 +50,6 @@ def load_persistent_data():
             with open(DATA_FILE, 'r') as f:
                 data = json.load(f)
                 ATTENDANCE_DATA = data.get('attendance', [])
-                DEVICE_SN = data.get('device_sn', "Unknown")
-                DEVICE_INFO = data.get('device_info', {})
                 print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records from file")
     except Exception as e:
         print(f"⚠️ Error loading persistent data: {e}")
@@ -92,8 +87,6 @@ def save_persistent_data():
         # Save attendance data
         data = {
             'attendance': ATTENDANCE_DATA,
-            'device_sn': DEVICE_SN,
-            'device_info': DEVICE_INFO,
             'last_updated': datetime.utcnow().isoformat()
         }
         with open(DATA_FILE, 'w') as f:
@@ -181,17 +174,19 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
         if data:
             DEVICES[device_index].update(data)
     else:
-        # Create new device
+        # Create new device with full serial number
         device_data = {
-            'sn': sn,
+            'sn': sn,  # Full serial number
             'ip_address': ip_address or 'Unknown',
-            'device_name': f"Device {sn[-4:]}" if len(sn) > 4 else sn,
+            'device_name': f"Device {sn}" if len(sn) <= 12 else f"Device {sn[-12:]}",
+            'short_sn': sn[-8:] if len(sn) > 8 else sn,
             'first_seen': now.isoformat(),
             'last_seen': now.isoformat(),
             'last_seen_seconds': 0,
             'records_count': 0,
             'comms_count': 1,
-            'status': 'online'
+            'status': 'online',
+            'params': {}
         }
         
         if data:
@@ -207,7 +202,7 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
     
     save_persistent_data()
 
-def parse_attendance_line(line: str, device_sn: str = "") -> Dict[str, Any]:
+def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, Any]:
     """
     Parse attendance line in format:
     USER_ID\tTIMESTAMP\tSTATUS\tVERIFICATION\tWORKCODE
@@ -216,25 +211,52 @@ def parse_attendance_line(line: str, device_sn: str = "") -> Dict[str, Any]:
     if len(parts) < 3:
         return {}
     
-    # Find device name for this SN
-    device_name = f"Device {device_sn[-4:]}" if len(device_sn) > 4 else device_sn
-    for device in DEVICES:
-        if device.get('sn') == device_sn:
-            device_name = device.get('device_name', device_name)
-            break
-    
     record = {
         'user_id': parts[0],
         'timestamp': parts[1],
         'status': parts[2],
         'verification': parts[3] if len(parts) > 3 else '',
         'workcode': parts[4] if len(parts) > 4 else '',
+        'device_sn': device_sn,  # Store full serial number
         'received_at': datetime.utcnow().isoformat(),
-        'raw': line,
-        'device_sn': device_sn,
-        'device_name': device_name
+        'raw': line
     }
-     
+    
+    # Find device name
+    device_name = "Unknown Device"
+    for device in DEVICES:
+        if device.get('sn') == device_sn:
+            device_name = device.get('device_name', f"Device {device_sn}")
+            break
+    
+    record['device_name'] = device_name
+    
+    # Map status codes to human readable
+    status_map = {
+        '0': 'Check-in',
+        '1': 'Check-out',
+        '2': 'Break-out',
+        '3': 'Break-in',
+        '4': 'Overtime-in',
+        '5': 'Overtime-out',
+        '255': 'Error'
+    }
+    record['status_text'] = status_map.get(record['status'], 'Unknown')
+    
+    # Parse date and time for display
+    try:
+        dt = datetime.strptime(record['timestamp'], "%Y-%m-%d %H:%M:%S")
+        record['display_date'] = dt.strftime("%Y-%m-%d")
+        record['display_time'] = dt.strftime("%H:%M:%S")
+        record['datetime_obj'] = dt.isoformat()
+    except:
+        record['display_date'] = record['timestamp'].split()[0] if ' ' in record['timestamp'] else record['timestamp']
+        record['display_time'] = record['timestamp'].split()[1] if ' ' in record['timestamp'] else ''
+        record['datetime_obj'] = None
+    
+    # Generate hash for raw data reference
+    record['raw_data_hash'] = hashlib.md5(line.encode()).hexdigest()
+    
     return record
 
 async def log_request(request: Request, body: str):
@@ -326,9 +348,6 @@ async def home(request: Request):
     today_records = [r for r in ATTENDANCE_DATA 
                     if r.get('timestamp', '').startswith(today.strftime('%Y-%m-%d'))]
     
-    # Get unique users
-    unique_users = len(set(r.get('user_id', '') for r in ATTENDANCE_DATA))
-    
     # Calculate device statistics
     online_devices = sum(1 for d in DEVICES if d.get('last_seen_seconds', 0) < 300)
     
@@ -358,9 +377,18 @@ async def home(request: Request):
     recent_attendance = []
     for record in ATTENDANCE_DATA[-50:]:
         display_record = record.copy()
-        display_record['device_sn'] = 'Unknown'  # Will be updated from actual data
-        display_record['device_name'] = 'Unknown Device'
-        display_record['raw_data_hash'] = hashlib.md5(record.get('raw', '').encode()).hexdigest()
+        
+        # Ensure device info is complete
+        if not display_record.get('device_sn'):
+            display_record['device_sn'] = 'Unknown'
+        
+        # Get device name if not already present
+        if not display_record.get('device_name') or display_record['device_name'] == 'Unknown Device':
+            for device in DEVICES:
+                if device.get('sn') == display_record['device_sn']:
+                    display_record['device_name'] = device.get('device_name', f"Device {display_record['device_sn']}")
+                    break
+        
         recent_attendance.append(display_record)
     
     # Get recent raw data
@@ -370,7 +398,7 @@ async def home(request: Request):
     server_url = str(request.base_url).rstrip('/')
     
     return templates.TemplateResponse(
-        "index.html",  # This should match your HTML file name
+        "index.html",
         {
             "request": request,
             "devices": display_devices,
@@ -399,7 +427,6 @@ async def get_devices():
 @app.post("/api/devices/rescan")
 async def rescan_devices():
     """Rescan for devices"""
-    # In a real implementation, this would scan the network
     log("🔄 Device rescan initiated")
     return {"message": "Device rescan initiated", "devices_count": len(DEVICES)}
 
@@ -409,7 +436,7 @@ async def get_device(device_sn: str):
     for device in DEVICES:
         if device.get('sn') == device_sn:
             return device
-    return {"error": "Device not found"}, 404
+    return JSONResponse({"error": "Device not found"}, status_code=404)
 
 @app.post("/api/device/{device_sn}/command")
 async def send_device_command(device_sn: str, command: str = Form(...)):
@@ -455,18 +482,30 @@ async def get_raw_data(data_hash: str):
     for rd in RAW_DATA_STORE:
         if rd.get('id') == data_hash:
             return rd
-    return {"error": "Raw data not found"}, 404
+    return JSONResponse({"error": "Raw data not found"}, status_code=404)
 
 @app.get("/api/attendance/recent")
 async def get_recent_attendance(limit: int = 100):
     """Get recent attendance records"""
     recent = ATTENDANCE_DATA[-limit:]
     
-    # Add device info to records
+    # Ensure device info is complete
     for record in recent:
-        record['device_sn'] = 'Unknown'
-        record['device_name'] = 'Unknown Device'
-        record['raw_data_hash'] = hashlib.md5(record.get('raw', '').encode()).hexdigest()
+        if not record.get('device_sn'):
+            record['device_sn'] = 'Unknown'
+        
+        # Find device name
+        device_name = "Unknown Device"
+        for device in DEVICES:
+            if device.get('sn') == record['device_sn']:
+                device_name = device.get('device_name', f"Device {record['device_sn']}")
+                break
+        
+        record['device_name'] = device_name
+        
+        # Ensure hash exists
+        if not record.get('raw_data_hash'):
+            record['raw_data_hash'] = hashlib.md5(record.get('raw', '').encode()).hexdigest()
     
     return recent
 
@@ -477,7 +516,7 @@ async def export_csv():
     writer = csv.writer(output)
     
     # Write header
-    writer.writerow(["User ID", "Date", "Time", "Status", "Status Text", "Verification", "Workcode", "Device", "Received At"])
+    writer.writerow(["User ID", "Date", "Time", "Status", "Status Text", "Verification", "Workcode", "Device SN", "Device Name", "Received At"])
     
     # Write data
     for record in ATTENDANCE_DATA:
@@ -489,7 +528,8 @@ async def export_csv():
             record.get('status_text', ''),
             record.get('verification', ''),
             record.get('workcode', ''),
-            'Unknown',  # Device info
+            record.get('device_sn', 'Unknown'),
+            record.get('device_name', 'Unknown Device'),
             record.get('received_at', '')
         ])
     
@@ -594,17 +634,12 @@ async def iclock_cdata(request: Request):
                 
                 # Check if this looks like attendance data
                 if len(parts) >= 2:
-                    record = parse_attendance_line(line)
+                    record = parse_attendance_line(line, device_sn)
                     if record:
-                        # Add device info to record
-                        record['device_sn'] = device_sn
-                        record['device_name'] = f"Device {device_sn[-4:]}" if len(device_sn) > 4 else device_sn
-                        record['raw_data_hash'] = hashlib.md5(line.encode()).hexdigest()
-                        
                         # Check for duplicate
-                        record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}"
+                        record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}_{device_sn}"
                         existing = any(
-                            f"{r.get('user_id')}_{r.get('timestamp')}_{r.get('status')}" == record_key 
+                            f"{r.get('user_id')}_{r.get('timestamp')}_{r.get('status')}_{r.get('device_sn')}" == record_key 
                             for r in ATTENDANCE_DATA
                         )
                         
@@ -627,12 +662,10 @@ async def iclock_cdata(request: Request):
 @app.get("/iclock/getrequest.aspx")
 async def iclock_getrequest(request: Request):
     """Device pulls commands from here"""
-    global DEVICE_SN
     
     # Get device SN from query params
     device_sn = request.query_params.get("SN", "")
     if device_sn:
-        DEVICE_SN = device_sn
         update_device_info(device_sn, request.client.host if request.client else "Unknown", {
             "last_pull": datetime.utcnow().isoformat()
         })
@@ -659,12 +692,13 @@ async def iclock_registry(request: Request):
     log("📝 DEVICE REGISTRATION")
     
     device_sn = ""
+    device_data = {}
+    
     for key, value in request.query_params.items():
         if key.upper() == "SN":
             device_sn = value
-            DEVICE_SN = value
-            log(f"📱 Registered Device SN: {DEVICE_SN}")
-        DEVICE_INFO[key] = value
+            log(f"📱 Registered Device SN: {device_sn}")
+        device_data[key] = value
     
     log(f"📋 Registration params: {dict(request.query_params)}")
     
@@ -673,7 +707,7 @@ async def iclock_registry(request: Request):
         update_device_info(device_sn, request.client.host if request.client else "Unknown", {
             "registered": True,
             "registration_time": datetime.utcnow().isoformat(),
-            **dict(request.query_params)
+            **device_data
         })
     
     save_persistent_data()
@@ -692,7 +726,8 @@ async def iclock_devicecmd(request: Request):
     
     log(f"📋 DEVICE CMD RESPONSE from {device_sn}: {body[:200]}...")
     
-    # Parse INFO responses
+    # Parse INFO responses to update device params
+    device_params = {}
     if "=" in body:
         lines = body.splitlines()
         for line in lines:
@@ -701,14 +736,15 @@ async def iclock_devicecmd(request: Request):
                     key, value = line.split('=', 1)
                     key = key.strip()
                     value = value.strip()
-                    DEVICE_INFO[key] = value
+                    device_params[key] = value
                 except:
                     pass
     
-    # Update device info
+    # Update device info with parameters
     update_device_info(device_sn, request.client.host if request.client else "Unknown", {
         "last_command_response": datetime.utcnow().isoformat(),
-        "command_response": body[:500]
+        "command_response": body[:500],
+        "params": device_params
     })
     
     save_persistent_data()
@@ -719,4 +755,3 @@ async def iclock_devicecmd(request: Request):
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
-
