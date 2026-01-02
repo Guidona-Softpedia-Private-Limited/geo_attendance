@@ -42,6 +42,30 @@
             50% { opacity: 0.7; }
             100% { opacity: 1; }
         }
+        .device-table th {
+            background-color: #f8fafc;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        .log-timestamp {
+            color: #6b7280;
+            font-family: monospace;
+            font-size: 0.75rem;
+        }
+        .log-message {
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .raw-data {
+            background-color: #1f2937;
+            color: #d1d5db;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -64,6 +88,10 @@
                 <div class="bg-green-50 px-4 py-2 rounded-lg shadow">
                     <span class="text-green-600">Live Today:</span>
                     <span class="font-bold ml-2" id="liveRecordsCount">{{ live_records }}</span>
+                </div>
+                <div class="bg-purple-50 px-4 py-2 rounded-lg shadow">
+                    <span class="text-purple-600">Device Comms:</span>
+                    <span class="font-bold ml-2" id="deviceComms">{{ comm_logs|length }}</span>
                 </div>
             </div>
         </header>
@@ -92,39 +120,6 @@
                             <i class="fas fa-download mr-2"></i>
                             Export CSV
                         </a>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <p class="text-gray-600 text-sm mb-4 p-3 bg-blue-50 rounded-lg">
-                        <i class="fas fa-info-circle mr-2 text-blue-500"></i>
-                        Fetches ALL historical attendance data from the biometric device.
-                        Use "Fetch All" to get complete attendance logs.
-                    </p>
-                    
-                    <!-- Command Queue -->
-                    <div class="bg-gray-100 rounded-lg p-4 mb-4">
-                        <div class="flex justify-between items-center mb-3">
-                            <span class="font-medium text-gray-700">
-                                <i class="fas fa-list mr-2"></i>Command Queue
-                            </span>
-                            <span id="queueCount" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs font-bold">
-                                {{ command_queue|length }} commands
-                            </span>
-                        </div>
-                        <div id="commandQueue" class="text-sm space-y-1">
-                            {% if command_queue %}
-                                {% for cmd in command_queue %}
-                                    <div class="bg-blue-100 text-blue-800 px-3 py-2 rounded border border-blue-200">
-                                        <i class="fas fa-arrow-right mr-2 text-xs"></i>{{ cmd }}
-                                    </div>
-                                {% endfor %}
-                            {% else %}
-                                <div class="text-gray-500 italic text-center py-3">
-                                    <i class="fas fa-inbox mr-2"></i>No commands in queue
-                                </div>
-                            {% endif %}
-                        </div>
                     </div>
                 </div>
 
@@ -195,27 +190,19 @@
                     </div>
                 </div>
 
-                <div class="mb-4">
-                    <p class="text-gray-600 text-sm mb-4 p-3 bg-green-50 rounded-lg">
-                        <i class="fas fa-info-circle mr-2 text-green-500"></i>
-                        Real-time attendance data from the biometric device.
-                        Updates automatically when device sends new records.
-                    </p>
-                    
-                    <!-- Live Stats -->
-                    <div class="grid grid-cols-3 gap-4 mb-6">
-                        <div class="bg-blue-50 p-4 rounded-lg text-center border border-blue-100">
-                            <div class="text-2xl font-bold text-blue-700" id="checkins">0</div>
-                            <div class="text-sm text-blue-600">Check-ins</div>
-                        </div>
-                        <div class="bg-red-50 p-4 rounded-lg text-center border border-red-100">
-                            <div class="text-2xl font-bold text-red-700" id="checkouts">0</div>
-                            <div class="text-sm text-red-600">Check-outs</div>
-                        </div>
-                        <div class="bg-purple-50 p-4 rounded-lg text-center border border-purple-100">
-                            <div class="text-2xl font-bold text-purple-700" id="uniqueUsers">0</div>
-                            <div class="text-sm text-purple-600">Unique Users</div>
-                        </div>
+                <!-- Live Stats -->
+                <div class="grid grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg text-center border border-blue-100">
+                        <div class="text-2xl font-bold text-blue-700" id="checkins">0</div>
+                        <div class="text-sm text-blue-600">Check-ins</div>
+                    </div>
+                    <div class="bg-red-50 p-4 rounded-lg text-center border border-red-100">
+                        <div class="text-2xl font-bold text-red-700" id="checkouts">0</div>
+                        <div class="text-sm text-red-600">Check-outs</div>
+                    </div>
+                    <div class="bg-purple-50 p-4 rounded-lg text-center border border-purple-100">
+                        <div class="text-2xl font-bold text-purple-700" id="uniqueUsers">0</div>
+                        <div class="text-sm text-purple-600">Unique Users</div>
                     </div>
                 </div>
 
@@ -270,33 +257,229 @@
             </div>
         </div>
 
-        <!-- Logs Panel -->
+        <!-- CARD 3: DEVICE INFORMATION TABLE -->
         <div class="card mt-6">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold text-gray-800 flex items-center">
-                    <i class="fas fa-terminal mr-2 text-gray-600"></i>
-                    System Logs
-                </h3>
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800">
+                        <i class="fas fa-microchip mr-2 text-purple-600"></i>
+                        Device Information
+                    </h2>
+                    <span class="status-badge bg-purple-100 text-purple-800 mt-2">
+                        {{ device_info|length }} Parameters
+                    </span>
+                </div>
                 <div class="flex gap-2">
-                    <button onclick="refreshLogs()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
-                        <i class="fas fa-redo mr-1"></i> Refresh
+                    <button onclick="refreshDeviceInfo()" 
+                            class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                        <i class="fas fa-sync-alt mr-2"></i>
+                        Refresh
                     </button>
-                    <button onclick="clearLogs()" class="text-sm text-red-600 hover:text-red-800 flex items-center">
-                        <i class="fas fa-trash mr-1"></i> Clear
+                    <button onclick="sendCommand('GET OPTION')" 
+                            class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                        <i class="fas fa-cog mr-2"></i>
+                        Get Options
                     </button>
                 </div>
             </div>
-            <div class="bg-gray-900 text-green-400 font-mono text-sm rounded-lg p-4 max-h-48 overflow-y-auto" id="logPanel">
-                {% for log in logs %}
-                    <div class="mb-1 border-b border-gray-800 pb-1">{{ log }}</div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200 device-table">
+                    <thead>
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parameter</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        {% for key, value in device_info.items() %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0 h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-cog text-blue-600"></i>
+                                    </div>
+                                    <div class="ml-4">
+                                        <div class="text-sm font-medium text-gray-900">{{ key }}</div>
+                                        <div class="text-xs text-gray-500">{{ key|replace('_', ' ')|title }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                    {% if key == 'sn' %}bg-green-100 text-green-800
+                                    {% elif 'time' in key %}bg-blue-100 text-blue-800
+                                    {% elif 'date' in key %}bg-purple-100 text-purple-800
+                                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                    {{ value }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {% if key == 'sn' %}Serial Number
+                                {% elif key == 'device_name' %}Device Model/Name
+                                {% elif key == 'fw_version' %}Firmware Version
+                                {% elif key == 'ip_address' %}IP Address
+                                {% elif key == 'mac' %}MAC Address
+                                {% elif key == 'push_version' %}Push Version
+                                {% elif 'time' in key %}Timestamp
+                                {% elif 'date' in key %}Date Information
+                                {% else %}Device Parameter{% endif %}
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {{ device_info_timestamps.get(key, 'Unknown') }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Command Queue -->
+            <div class="mt-6">
+                <h3 class="font-medium text-gray-700 mb-3 flex items-center">
+                    <i class="fas fa-list mr-2"></i>Command Queue
+                </h3>
+                <div class="bg-gray-100 rounded-lg p-4">
+                    <div class="flex justify-between items-center mb-3">
+                        <span class="font-medium text-gray-700">
+                            <i class="fas fa-list mr-2"></i>Pending Commands
+                        </span>
+                        <span id="queueCount" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs font-bold">
+                            {{ command_queue|length }} commands
+                        </span>
+                    </div>
+                    <div id="commandQueue" class="space-y-2">
+                        {% if command_queue %}
+                            {% for cmd in command_queue %}
+                                <div class="bg-blue-100 text-blue-800 px-4 py-3 rounded-lg border border-blue-200 flex justify-between items-center">
+                                    <div>
+                                        <i class="fas fa-arrow-right mr-2 text-blue-600"></i>
+                                        <code class="font-mono">{{ cmd }}</code>
+                                    </div>
+                                    <button onclick="removeCommand('{{ loop.index0 }}')" class="text-red-500 hover:text-red-700">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-gray-500 italic text-center py-4 bg-gray-50 rounded border border-gray-200">
+                                <i class="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No commands in queue</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CARD 4: SYSTEM LOGS WITH RAW DATA -->
+        <div class="card mt-6">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center">
+                        <i class="fas fa-terminal mr-2 text-gray-600"></i>
+                        System Logs & Raw Device Data
+                    </h2>
+                    <span class="status-badge bg-gray-100 text-gray-800 mt-2">
+                        {{ logs|length }} system logs, {{ comm_logs|length }} device communications
+                    </span>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="refreshLogs()" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                        <i class="fas fa-redo mr-2"></i>
+                        Refresh Logs
+                    </button>
+                    <button onclick="clearLogs()" 
+                            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                        <i class="fas fa-trash mr-2"></i>
+                        Clear Logs
+                    </button>
+                </div>
+            </div>
+
+            <!-- Log Filters -->
+            <div class="mb-4 flex flex-wrap gap-2">
+                <button onclick="filterLogs('all')" 
+                        class="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 hover:bg-blue-200">
+                    All Logs
+                </button>
+                <button onclick="filterLogs('device')" 
+                        class="px-3 py-1 rounded-full text-sm bg-green-100 text-green-800 hover:bg-green-200">
+                    Device Comms
+                </button>
+                <button onclick="filterLogs('system')" 
+                        class="px-3 py-1 rounded-full text-sm bg-purple-100 text-purple-800 hover:bg-purple-200">
+                    System
+                </button>
+                <button onclick="filterLogs('error')" 
+                        class="px-3 py-1 rounded-full text-sm bg-red-100 text-red-800 hover:bg-red-200">
+                    Errors
+                </button>
+            </div>
+
+            <!-- Logs Container -->
+            <div class="bg-gray-900 text-gray-300 font-mono text-sm rounded-lg p-4 max-h-96 overflow-y-auto" id="logPanel">
+                {% for log_entry in logs %}
+                    {% if 'DEVICE DATA' in log_entry or 'RAW:' in log_entry %}
+                        <div class="mb-3 pb-3 border-b border-gray-800 device-log">
+                            <div class="flex justify-between items-start mb-2">
+                                <span class="text-yellow-400">
+                                    <i class="fas fa-satellite-dish mr-2"></i>{{ log_entry.split(']')[0] }}]
+                                </span>
+                                <span class="text-xs text-gray-500">Device Communication</span>
+                            </div>
+                            <div class="raw-data p-3 rounded mt-2">
+                                {{ log_entry.split('RAW:')[1] if 'RAW:' in log_entry else log_entry.split(']')[1]|trim }}
+                            </div>
+                        </div>
+                    {% elif 'ERROR' in log_entry or 'Error' in log_entry %}
+                        <div class="mb-2 text-red-400">
+                            <span class="log-timestamp">[{{ log_entry.split(']')[0] }}]</span>
+                            <span class="log-message">{{ log_entry.split(']')[1] }}</span>
+                        </div>
+                    {% elif 'Queued' in log_entry or 'Sending' in log_entry %}
+                        <div class="mb-2 text-blue-400">
+                            <span class="log-timestamp">[{{ log_entry.split(']')[0] }}]</span>
+                            <span class="log-message">{{ log_entry.split(']')[1] }}</span>
+                        </div>
+                    {% else %}
+                        <div class="mb-2">
+                            <span class="log-timestamp">[{{ log_entry.split(']')[0] }}]</span>
+                            <span class="log-message">{{ log_entry.split(']')[1] }}</span>
+                        </div>
+                    {% endif %}
                 {% endfor %}
+            </div>
+
+            <!-- Raw Data Stats -->
+            <div class="mt-4 grid grid-cols-4 gap-4">
+                <div class="bg-gray-800 p-3 rounded-lg text-center">
+                    <div class="text-xl font-bold text-white">{{ total_data_received }}</div>
+                    <div class="text-xs text-gray-400">Total Data Received</div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded-lg text-center">
+                    <div class="text-xl font-bold text-green-400">{{ comm_logs|length }}</div>
+                    <div class="text-xs text-gray-400">Device Comms</div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded-lg text-center">
+                    <div class="text-xl font-bold text-blue-400">{{ logs|selectattr('ERROR')|list|length }}</div>
+                    <div class="text-xs text-gray-400">Errors</div>
+                </div>
+                <div class="bg-gray-800 p-3 rounded-lg text-center">
+                    <div class="text-xl font-bold text-yellow-400">{{ last_data_time }}</div>
+                    <div class="text-xs text-gray-400">Last Data</div>
+                </div>
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>eSSL Attendance Fetcher • Simple tool for biometric device data</p>
+            <p>eSSL Attendance Fetcher v2.0 • Complete device monitoring solution</p>
             <p class="mt-1 text-xs">
+                System Status: <span class="text-green-600 font-bold">●</span> Online | 
                 Last update: <span id="lastUpdateTime">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span>
             </p>
         </footer>
@@ -426,6 +609,25 @@
             }
         }
         
+        // Refresh device information
+        async function refreshDeviceInfo() {
+            try {
+                const response = await fetch('/api/device/info');
+                const data = await response.json();
+                
+                // Update device info display
+                if (data.sn) {
+                    document.getElementById('deviceSn').textContent = data.sn;
+                }
+                
+                showNotification('Device information refreshed', 'success');
+                
+            } catch (error) {
+                console.error('Error refreshing device info:', error);
+                showNotification('Error refreshing device info', 'error');
+            }
+        }
+        
         // Send command to device
         async function sendCommand(command) {
             try {
@@ -446,6 +648,24 @@
             }
         }
         
+        // Remove command from queue
+        async function removeCommand(index) {
+            if (confirm('Remove this command from queue?')) {
+                try {
+                    const response = await fetch(`/api/command/remove/${index}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    const result = await response.json();
+                    showNotification(result.message, 'success');
+                    refreshQueue();
+                    
+                } catch (error) {
+                    showNotification('Error removing command', 'error');
+                }
+            }
+        }
+        
         // Refresh command queue
         async function refreshQueue() {
             try {
@@ -459,14 +679,21 @@
                 
                 if (data.queue.length === 0) {
                     container.innerHTML = `
-                        <div class="text-gray-500 italic text-center py-3">
-                            <i class="fas fa-inbox mr-2"></i>No commands in queue
+                        <div class="text-gray-500 italic text-center py-4 bg-gray-50 rounded border border-gray-200">
+                            <i class="fas fa-inbox text-2xl mb-2"></i>
+                            <p>No commands in queue</p>
                         </div>
                     `;
                 } else {
-                    container.innerHTML = data.queue.map(cmd => 
-                        `<div class="bg-blue-100 text-blue-800 px-3 py-2 rounded border border-blue-200">
-                            <i class="fas fa-arrow-right mr-2 text-xs"></i>${cmd}
+                    container.innerHTML = data.queue.map((cmd, index) => 
+                        `<div class="bg-blue-100 text-blue-800 px-4 py-3 rounded-lg border border-blue-200 flex justify-between items-center">
+                            <div>
+                                <i class="fas fa-arrow-right mr-2 text-blue-600"></i>
+                                <code class="font-mono">${cmd}</code>
+                            </div>
+                            <button onclick="removeCommand('${index}')" class="text-red-500 hover:text-red-700">
+                                <i class="fas fa-times"></i>
+                            </button>
                         </div>`
                     ).join('');
                 }
@@ -479,20 +706,97 @@
         // Refresh logs
         async function refreshLogs() {
             try {
-                // In a real implementation, you'd fetch logs from an API
-                // For now, we'll just scroll to bottom
+                const response = await fetch('/api/logs');
+                const data = await response.json();
+                
                 const logPanel = document.getElementById('logPanel');
+                let html = '';
+                
+                data.logs.slice(-100).forEach(log_entry => {
+                    if (log_entry.includes('DEVICE DATA') || log_entry.includes('RAW:')) {
+                        html += `
+                            <div class="mb-3 pb-3 border-b border-gray-800 device-log">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-yellow-400">
+                                        <i class="fas fa-satellite-dish mr-2"></i>${log_entry.split(']')[0]}]
+                                    </span>
+                                    <span class="text-xs text-gray-500">Device Communication</span>
+                                </div>
+                                <div class="raw-data p-3 rounded mt-2">
+                                    ${log_entry.includes('RAW:') ? log_entry.split('RAW:')[1] : log_entry.split(']')[1]}
+                                </div>
+                            </div>
+                        `;
+                    } else if (log_entry.includes('ERROR') || log_entry.includes('Error')) {
+                        html += `
+                            <div class="mb-2 text-red-400">
+                                <span class="log-timestamp">[${log_entry.split(']')[0]}]</span>
+                                <span class="log-message">${log_entry.split(']')[1]}</span>
+                            </div>
+                        `;
+                    } else if (log_entry.includes('Queued') || log_entry.includes('Sending')) {
+                        html += `
+                            <div class="mb-2 text-blue-400">
+                                <span class="log-timestamp">[${log_entry.split(']')[0]}]</span>
+                                <span class="log-message">${log_entry.split(']')[1]}</span>
+                            </div>
+                        `;
+                    } else {
+                        html += `
+                            <div class="mb-2">
+                                <span class="log-timestamp">[${log_entry.split(']')[0]}]</span>
+                                <span class="log-message">${log_entry.split(']')[1]}</span>
+                            </div>
+                        `;
+                    }
+                });
+                
+                logPanel.innerHTML = html;
                 logPanel.scrollTop = logPanel.scrollHeight;
+                
+                showNotification('Logs refreshed', 'success');
+                
             } catch (error) {
                 console.error('Error refreshing logs:', error);
             }
         }
         
+        // Filter logs by type
+        function filterLogs(type) {
+            const logPanel = document.getElementById('logPanel');
+            const logs = logPanel.querySelectorAll('.mb-2, .mb-3');
+            
+            logs.forEach(log => {
+                switch(type) {
+                    case 'device':
+                        log.style.display = log.classList.contains('device-log') ? '' : 'none';
+                        break;
+                    case 'system':
+                        log.style.display = !log.classList.contains('device-log') && 
+                                          !log.querySelector('.text-red-400') ? '' : 'none';
+                        break;
+                    case 'error':
+                        log.style.display = log.querySelector('.text-red-400') ? '' : 'none';
+                        break;
+                    default:
+                        log.style.display = '';
+                }
+            });
+        }
+        
         // Clear logs
-        function clearLogs() {
-            if (confirm('Clear all logs?')) {
-                const logPanel = document.getElementById('logPanel');
-                logPanel.innerHTML = '<div class="text-gray-500 italic">Logs cleared</div>';
+        async function clearLogs() {
+            if (confirm('Clear all system logs? This will not delete attendance data.')) {
+                try {
+                    const response = await fetch('/api/logs/clear', { method: 'DELETE' });
+                    const result = await response.json();
+                    
+                    showNotification(result.message, 'success');
+                    setTimeout(refreshLogs, 1000);
+                    
+                } catch (error) {
+                    showNotification('Error clearing logs', 'error');
+                }
             }
         }
         
@@ -544,14 +848,11 @@
             updateStats();
             updateLastUpdateTime();
             
-            // Add initial logs
-            const logPanel = document.getElementById('logPanel');
-            if (logPanel.children.length === 0) {
-                logPanel.innerHTML = '<div class="text-gray-500 italic">System started...</div>';
-            }
-            
             // Auto-scroll logs to bottom
-            logPanel.scrollTop = logPanel.scrollHeight;
+            const logPanel = document.getElementById('logPanel');
+            if (logPanel) {
+                logPanel.scrollTop = logPanel.scrollHeight;
+            }
         });
     </script>
 </body>
