@@ -11,8 +11,9 @@ import csv
 import io
 from pathlib import Path
 import hashlib
+import uvicorn
 
-app = FastAPI()
+app = FastAPI(title="eSSL Multi-Device Monitor")
 
 # ---------------- DATA STORAGE ----------------
 
@@ -28,10 +29,14 @@ COMMAND_QUEUE: List[str] = []
 DEVICES: List[Dict[str, Any]] = []
 
 # File for persistent storage
-DATA_FILE = "attendance_data.json"
-LOG_FILE = "device_logs.txt"
-RAW_DATA_FILE = "raw_data.json"
-DEVICES_FILE = "devices.json"
+DATA_DIR = "data"
+DATA_FILE = f"{DATA_DIR}/attendance_data.json"
+LOG_FILE = f"{DATA_DIR}/device_logs.txt"
+RAW_DATA_FILE = f"{DATA_DIR}/raw_data.json"
+DEVICES_FILE = f"{DATA_DIR}/devices.json"
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
 
 # Track device connection
 IS_FETCHING_ALL_LOGS = False
@@ -47,7 +52,7 @@ def load_persistent_data():
     try:
         # Load attendance data
         if os.path.exists(DATA_FILE):
-            with open(DATA_FILE, 'r') as f:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 ATTENDANCE_DATA = data.get('attendance', [])
                 print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records from file")
@@ -57,7 +62,7 @@ def load_persistent_data():
     try:
         # Load logs
         if os.path.exists(LOG_FILE):
-            with open(LOG_FILE, 'r') as f:
+            with open(LOG_FILE, 'r', encoding='utf-8') as f:
                 LOGS = [line.strip() for line in f.readlines() if line.strip()]
                 print(f"📂 Loaded {len(LOGS)} log entries from file")
     except Exception as e:
@@ -66,7 +71,7 @@ def load_persistent_data():
     try:
         # Load raw data
         if os.path.exists(RAW_DATA_FILE):
-            with open(RAW_DATA_FILE, 'r') as f:
+            with open(RAW_DATA_FILE, 'r', encoding='utf-8') as f:
                 RAW_DATA_STORE = json.load(f)
                 print(f"📂 Loaded {len(RAW_DATA_STORE)} raw data entries")
     except Exception as e:
@@ -75,7 +80,7 @@ def load_persistent_data():
     try:
         # Load devices
         if os.path.exists(DEVICES_FILE):
-            with open(DEVICES_FILE, 'r') as f:
+            with open(DEVICES_FILE, 'r', encoding='utf-8') as f:
                 DEVICES = json.load(f)
                 print(f"📂 Loaded {len(DEVICES)} devices")
     except Exception as e:
@@ -89,7 +94,7 @@ def save_persistent_data():
             'attendance': ATTENDANCE_DATA,
             'last_updated': datetime.utcnow().isoformat()
         }
-        with open(DATA_FILE, 'w') as f:
+        with open(DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
     except Exception as e:
         print(f"⚠️ Error saving persistent data: {e}")
@@ -97,7 +102,7 @@ def save_persistent_data():
     try:
         # Save logs (keep last 2000 lines to avoid file getting too large)
         logs_to_save = LOGS[-2000:] if len(LOGS) > 2000 else LOGS
-        with open(LOG_FILE, 'w') as f:
+        with open(LOG_FILE, 'w', encoding='utf-8') as f:
             for log_entry in logs_to_save:
                 f.write(log_entry + "\n")
     except Exception as e:
@@ -105,14 +110,14 @@ def save_persistent_data():
     
     try:
         # Save raw data
-        with open(RAW_DATA_FILE, 'w') as f:
+        with open(RAW_DATA_FILE, 'w', encoding='utf-8') as f:
             json.dump(RAW_DATA_STORE[-1000:], f, indent=2)
     except Exception as e:
         print(f"⚠️ Error saving raw data: {e}")
     
     try:
         # Save devices
-        with open(DEVICES_FILE, 'w') as f:
+        with open(DEVICES_FILE, 'w', encoding='utf-8') as f:
             json.dump(DEVICES, f, indent=2)
     except Exception as e:
         print(f"⚠️ Error saving devices: {e}")
@@ -147,11 +152,17 @@ def store_raw_data(device_sn: str, raw_data: str, direction: str = "incoming"):
     if len(RAW_DATA_STORE) > 1000:
         RAW_DATA_STORE.pop(0)
     
+    # Save immediately
+    save_persistent_data()
+    
     return data_hash
 
 def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = None):
     """Update or create device information"""
     global DEVICES
+    
+    # Clean SN (remove spaces, special characters)
+    sn = str(sn).strip()
     
     # Find existing device
     device_index = -1
@@ -197,10 +208,15 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
     
     # Update last seen seconds for all devices
     for device in DEVICES:
-        last_seen = datetime.fromisoformat(device['last_seen'].replace('Z', '+00:00'))
-        device['last_seen_seconds'] = (now - last_seen).total_seconds()
+        try:
+            last_seen_str = device['last_seen'].replace('Z', '+00:00')
+            last_seen = datetime.fromisoformat(last_seen_str)
+            device['last_seen_seconds'] = (now - last_seen).total_seconds()
+        except:
+            device['last_seen_seconds'] = 999999
     
     save_persistent_data()
+    return device_index >= 0
 
 def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, Any]:
     """
@@ -363,8 +379,10 @@ async def home(request: Request):
         
         # Format dates
         try:
-            first_seen_dt = datetime.fromisoformat(device['first_seen'].replace('Z', '+00:00'))
-            last_seen_dt = datetime.fromisoformat(device['last_seen'].replace('Z', '+00:00'))
+            first_seen_str = device['first_seen'].replace('Z', '+00:00')
+            last_seen_str = device['last_seen'].replace('Z', '+00:00')
+            first_seen_dt = datetime.fromisoformat(first_seen_str)
+            last_seen_dt = datetime.fromisoformat(last_seen_str)
             display_device['first_seen'] = first_seen_dt.strftime("%Y-%m-%d %H:%M")
             display_device['last_seen'] = last_seen_dt.strftime("%Y-%m-%d %H:%M")
         except:
@@ -469,6 +487,9 @@ async def get_recent_raw_data(limit: int = 30):
 async def get_device_raw_data(device_sn: str):
     """Get raw data for specific device"""
     device_data = [rd for rd in RAW_DATA_STORE if rd.get('device_sn') == device_sn]
+    if not device_data:
+        return JSONResponse({"error": "No raw data found for device"}, status_code=404)
+    
     total_bytes = sum(rd.get('length', 0) for rd in device_data)
     return {
         "raw_data": '\n'.join([rd.get('raw_data', '') for rd in device_data[-50:]]),
@@ -588,36 +609,55 @@ async def clear_logs():
 @app.api_route("/iclock/cdata.aspx", methods=["GET", "POST"])
 async def iclock_cdata(request: Request):
     """Handle ALL device data - this is the MAIN endpoint"""
-    body = (await request.body()).decode(errors="ignore")
+    try:
+        body = (await request.body()).decode('utf-8', errors='ignore')
+    except:
+        body = ""
     
-    # Get device SN from query params or body
+    # Get device SN from query params
     device_sn = request.query_params.get("SN", "")
-    if not device_sn:
-        # Try to extract from body
-        for line in body.splitlines():
-            if "SN=" in line.upper():
-                parts = line.split("=", 1)
-                if len(parts) > 1:
-                    device_sn = parts[1].strip()
-                    break
     
+    # If SN is empty in query, try to extract from body
+    if not device_sn and body:
+        # Look for SN= in body (case insensitive)
+        sn_match = re.search(r'SN=([^\s\r\n]+)', body, re.IGNORECASE)
+        if sn_match:
+            device_sn = sn_match.group(1).strip()
+    
+    # If still no SN, try to extract from headers or IP
     if not device_sn:
-        device_sn = "Unknown"
+        # Try to get from User-Agent or other headers
+        user_agent = request.headers.get("User-Agent", "")
+        if "SN=" in user_agent.upper():
+            sn_match = re.search(r'SN=([^\s]+)', user_agent, re.IGNORECASE)
+            if sn_match:
+                device_sn = sn_match.group(1).strip()
+    
+    # Fallback to IP-based device ID
+    if not device_sn:
+        client_ip = request.client.host if request.client else "Unknown"
+        device_sn = f"IP-{client_ip.replace('.', '-')}"
+    
+    # Clean the device SN
+    device_sn = device_sn.strip()
     
     # Store raw data
-    store_raw_data(device_sn, body, "incoming")
+    data_hash = store_raw_data(device_sn, body, "incoming")
     await log_request(request, body)
     
     # Update device info
     client_ip = request.client.host if request.client else "Unknown"
     update_device_info(device_sn, client_ip, {
         "last_request": datetime.utcnow().isoformat(),
-        "endpoint": "/iclock/cdata.aspx"
+        "endpoint": "/iclock/cdata.aspx",
+        "method": request.method
     })
 
     if request.method == "GET":
         # Device is checking if server is alive
-        return PlainTextResponse("OK")
+        response = "OK=0"
+        store_raw_data(device_sn, response, "outgoing")
+        return PlainTextResponse(response)
 
     if request.method == "POST":
         lines = body.splitlines()
@@ -652,12 +692,23 @@ async def iclock_cdata(request: Request):
                                 if device.get('sn') == device_sn:
                                     device['records_count'] = device.get('records_count', 0) + 1
                                     break
+            elif '=' in line:
+                # Parse parameters (e.g., SN=OCK194560212)
+                key_value = line.split('=', 1)
+                if len(key_value) == 2:
+                    key, value = key_value
+                    if key.upper() == 'SN' and value and value != device_sn:
+                        # Update device SN if found in body
+                        device_sn = value.strip()
+                        update_device_info(device_sn, client_ip)
         
         if attendance_count > 0:
             save_persistent_data()
             log(f"🎉 Added {attendance_count} attendance records from {device_sn} (Total: {len(ATTENDANCE_DATA)})")
         
-        return PlainTextResponse("OK")
+        response = "OK"
+        store_raw_data(device_sn, response, "outgoing")
+        return PlainTextResponse(response)
 
 @app.get("/iclock/getrequest.aspx")
 async def iclock_getrequest(request: Request):
@@ -665,10 +716,12 @@ async def iclock_getrequest(request: Request):
     
     # Get device SN from query params
     device_sn = request.query_params.get("SN", "")
-    if device_sn:
-        update_device_info(device_sn, request.client.host if request.client else "Unknown", {
-            "last_pull": datetime.utcnow().isoformat()
-        })
+    if not device_sn:
+        return PlainTextResponse("ERROR: SN parameter required")
+    
+    update_device_info(device_sn, request.client.host if request.client else "Unknown", {
+        "last_pull": datetime.utcnow().isoformat()
+    })
     
     # Log the pull request
     log(f"📡 Device pulling command (SN: {device_sn})")
@@ -683,8 +736,11 @@ async def iclock_getrequest(request: Request):
         
         return PlainTextResponse(command)
     else:
-        # Default response
-        return PlainTextResponse("GET ATTLOG")
+        # Default response - check for data
+        default_cmd = "GET ATTLOG"
+        log(f"📤 SENDING default to {device_sn}: {default_cmd}")
+        store_raw_data(device_sn, default_cmd, "outgoing")
+        return PlainTextResponse(default_cmd)
 
 @app.get("/iclock/registry.aspx")
 async def iclock_registry(request: Request):
@@ -716,10 +772,19 @@ async def iclock_registry(request: Request):
 @app.post("/iclock/devicecmd.aspx")
 async def iclock_devicecmd(request: Request):
     """Device command responses"""
-    body = (await request.body()).decode(errors="ignore")
+    try:
+        body = (await request.body()).decode('utf-8', errors='ignore')
+    except:
+        body = ""
     
     # Extract device SN from URL or body
     device_sn = request.query_params.get("SN", "Unknown")
+    
+    # Try to extract SN from body if not in URL
+    if device_sn == "Unknown" and body:
+        sn_match = re.search(r'SN=([^\s\r\n]+)', body, re.IGNORECASE)
+        if sn_match:
+            device_sn = sn_match.group(1).strip()
     
     # Store raw data
     store_raw_data(device_sn, body, "incoming")
@@ -755,3 +820,14 @@ async def iclock_devicecmd(request: Request):
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
+
+@app.get("/health")
+async def health():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "devices": len(DEVICES),
+        "attendance_records": len(ATTENDANCE_DATA),
+        "raw_data_entries": len(RAW_DATA_STORE)
+    }
