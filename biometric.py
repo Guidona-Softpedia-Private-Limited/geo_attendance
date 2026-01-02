@@ -23,7 +23,7 @@ ATTENDANCE_DISPLAY: List[str] = []
 # Command queue
 COMMAND_QUEUE: List[str] = []
 # Device information
-DEVICE_SN = "Unknown"
+DEVICE_SN = "Not detected yet"
 DEVICE_INFO: Dict[str, str] = {}
 
 # File for persistent storage
@@ -47,7 +47,7 @@ def load_persistent_data():
             with open(DATA_FILE, 'r') as f:
                 data = json.load(f)
                 ATTENDANCE_DATA = data.get('attendance', [])
-                DEVICE_SN = data.get('device_sn', "Unknown")
+                DEVICE_SN = data.get('device_sn', "Not detected yet")
                 DEVICE_INFO = data.get('device_info', {})
                 print(f"📂 Loaded {len(ATTENDANCE_DATA)} attendance records from file")
     except Exception as e:
@@ -635,3 +635,4 @@ async def reset_device():
 @app.get("/favicon.ico")
 async def favicon():
     return PlainTextResponse("")
+
