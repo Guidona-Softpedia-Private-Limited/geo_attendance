@@ -277,7 +277,7 @@ async def dashboard(request: Request):
                 record['display_date'] = timestamp[:10]
                 record['display_time'] = timestamp[11:19] if len(timestamp) > 19 else timestamp
     
-    return templates.TemplateResponse("dashboard.html", {
+    return templates.TemplateResponse("index.html", {
         "request": request,
         "total_records": len(ATTENDANCE_RECORDS),
         "live_records": len(LIVE_ATTENDANCE),
