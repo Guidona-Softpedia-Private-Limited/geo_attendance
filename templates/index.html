@@ -1,933 +1,389 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>eSSL Probe UI - ALL Attendance Data</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-
-<style>
-    body {
-        margin: 0;
-        font-family: 'Inter', sans-serif;
-        background: radial-gradient(circle at top, #0f2027, #000);
-        color: #e5e7eb;
-    }
-
-    h1 {
-        text-align: center;
-        font-weight: 600;
-        margin: 30px 0;
-        color: #22d3ee;
-        letter-spacing: 1px;
-    }
-
-    .container {
-        max-width: 1300px;
-        margin: auto;
-        padding: 20px;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 20px;
-    }
-
-    .card {
-        background: rgba(255, 255, 255, 0.06);
-        backdrop-filter: blur(12px);
-        border-radius: 16px;
-        padding: 20px;
-        margin-bottom: 25px;
-        box-shadow: 0 0 40px rgba(34, 211, 238, 0.08);
-        border: 1px solid rgba(255,255,255,0.08);
-    }
-
-    h2 {
-        margin-top: 0;
-        font-weight: 500;
-        color: #38bdf8;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-    }
-
-    form {
-        display: flex;
-        gap: 15px;
-        align-items: center;
-        flex-wrap: wrap;
-    }
-
-    label {
-        font-size: 14px;
-        opacity: 0.85;
-    }
-
-    select, button, input {
-        background: #020617;
-        color: #e5e7eb;
-        border: 1px solid rgba(255,255,255,0.15);
-        padding: 10px 14px;
-        border-radius: 10px;
-        font-size: 14px;
-        outline: none;
-    }
-
-    select:hover, button:hover, input:hover {
-        border-color: #22d3ee;
-    }
-
-    button {
-        cursor: pointer;
-        background: linear-gradient(135deg, #22d3ee, #3b82f6);
-        color: #020617;
-        font-weight: 600;
-        transition: transform 0.2s ease;
-        border: none;
-    }
-
-    button:hover {
-        transform: scale(1.05);
-    }
-
-    .btn-small {
-        padding: 6px 12px;
-        font-size: 12px;
-    }
-
-    .btn-red {
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-        color: white;
-    }
-
-    .btn-green {
-        background: linear-gradient(135deg, #10b981, #059669);
-        color: white;
-    }
-
-    .btn-blue {
-        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-        color: white;
-    }
-
-    .btn-orange {
-        background: linear-gradient(135deg, #f97316, #ea580c);
-        color: white;
-    }
-
-    .btn-purple {
-        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-        color: white;
-    }
-
-    .btn-yellow {
-        background: linear-gradient(135deg, #f59e0b, #d97706);
-        color: white;
-    }
-
-    .logs {
-        background: #020617;
-        border-radius: 14px;
-        padding: 15px;
-        height: 420px;
-        overflow-y: auto;
-        font-family: 'Monaco', 'Courier New', monospace;
-        font-size: 12px;
-        line-height: 1.4;
-        box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
-    }
-
-    .log-line {
-        color: #22c55e;
-        white-space: pre-wrap;
-        margin-bottom: 5px;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        padding-bottom: 5px;
-    }
-
-    .att-line {
-        color: #fbbf24;
-        white-space: pre-wrap;
-        margin-bottom: 5px;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        padding-bottom: 5px;
-    }
-
-    .queue-item {
-        background: rgba(34, 211, 238, 0.1);
-        padding: 8px 12px;
-        margin: 5px 0;
-        border-radius: 8px;
-        border-left: 3px solid #22d3ee;
-    }
-
-    footer {
-        text-align: center;
-        font-size: 12px;
-        opacity: 0.5;
-        margin-top: 25px;
-        grid-column: 1 / -1;
-    }
-
-    .command-queue {
-        background: rgba(34, 211, 238, 0.05);
-        padding: 15px;
-        border-radius: 10px;
-        margin-top: 10px;
-        max-height: 150px;
-        overflow-y: auto;
-    }
-
-    .empty-queue {
-        color: rgba(255,255,255,0.3);
-        font-style: italic;
-        text-align: center;
-        padding: 20px;
-    }
-
-    .stats {
-        display: flex;
-        gap: 15px;
-        margin-bottom: 15px;
-        padding: 15px;
-        background: rgba(0,0,0,0.3);
-        border-radius: 12px;
-        flex-wrap: wrap;
-    }
-
-    .stat-item {
-        text-align: center;
-        flex: 1;
-        min-width: 100px;
-        padding: 10px;
-        background: rgba(255,255,255,0.05);
-        border-radius: 8px;
-    }
-
-    .stat-value {
-        font-size: 24px;
-        font-weight: bold;
-        color: #22d3ee;
-    }
-
-    .stat-label {
-        font-size: 12px;
-        opacity: 0.7;
-        margin-top: 5px;
-    }
-
-    .device-info {
-        background: rgba(34, 211, 238, 0.1);
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 15px;
-        border-left: 4px solid #22d3ee;
-    }
-
-    .status-indicator {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        border-radius: 50%;
-        margin-right: 8px;
-    }
-
-    .status-online {
-        background-color: #10b981;
-        box-shadow: 0 0 10px #10b981;
-    }
-
-    .status-fetching {
-        background-color: #f59e0b;
-        box-shadow: 0 0 10px #f59e0b;
-        animation: pulse 1.5s infinite;
-    }
-
-    @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.5; }
-        100% { opacity: 1; }
-    }
-
-    .refresh-controls {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        margin-top: 15px;
-        padding: 10px;
-        background: rgba(0,0,0,0.2);
-        border-radius: 8px;
-    }
-
-    .action-buttons {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 10px;
-        margin-top: 15px;
-    }
-
-    .search-box {
-        margin: 10px 0;
-        display: flex;
-        gap: 10px;
-    }
-
-    .search-box input {
-        flex: 1;
-    }
-
-    .filter-controls {
-        display: flex;
-        gap: 10px;
-        margin: 10px 0;
-        align-items: center;
-    }
-
-    .time-filter {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-    }
-
-    .time-filter input {
-        width: 150px;
-    }
-
-    .record-info {
-        font-size: 11px;
-        color: rgba(255,255,255,0.5);
-        margin-left: 10px;
-    }
-
-    .tab-buttons {
-        display: flex;
-        gap: 5px;
-        margin-bottom: 15px;
-    }
-
-    .tab-button {
-        padding: 8px 15px;
-        background: rgba(255,255,255,0.1);
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        color: rgba(255,255,255,0.7);
-    }
-
-    .tab-button.active {
-        background: #22d3ee;
-        color: #020617;
-        font-weight: bold;
-    }
-
-    .tab-content {
-        display: none;
-    }
-
-    .tab-content.active {
-        display: block;
-    }
-
-    .fetch-status {
-        display: inline-block;
-        padding: 4px 10px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: bold;
-        margin-left: 10px;
-    }
-
-    .fetching {
-        background: rgba(245, 158, 11, 0.2);
-        color: #f59e0b;
-        border: 1px solid #f59e0b;
-    }
-
-    .idle {
-        background: rgba(34, 197, 94, 0.2);
-        color: #22c55e;
-        border: 1px solid #22c55e;
-    }
-
-    .warning-box {
-        background: rgba(245, 158, 11, 0.1);
-        border: 1px solid rgba(245, 158, 11, 0.3);
-        border-radius: 10px;
-        padding: 15px;
-        margin: 15px 0;
-    }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eSSL Attendance Fetcher</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-live { background: #10b981; color: white; }
+        .status-historical { background: #3b82f6; color: white; }
+        .attendance-row {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 8px 0;
+        }
+        .attendance-row:last-child {
+            border-bottom: none;
+        }
+    </style>
 </head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-800">
+                <i class="fas fa-fingerprint mr-3 text-blue-600"></i>
+                eSSL Attendance Fetcher
+            </h1>
+            <p class="text-gray-600 mt-2">
+                Device SN: <span class="font-bold" id="deviceSn">{{ device_sn }}</span>
+            </p>
+        </header>
 
-<body>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- CARD 1: ALL ATTENDANCE RECORDS -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-database mr-2 text-blue-600"></i>
+                            All Attendance Records
+                        </h2>
+                        <span class="status-badge status-historical">
+                            {{ total_records }} Total Records
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="fetchAllAttendance()" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+                            <i class="fas fa-sync-alt mr-2"></i>
+                            Fetch All
+                        </button>
+                        <a href="/api/export/csv" 
+                           class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                            <i class="fas fa-download mr-2"></i>
+                            Export CSV
+                        </a>
+                    </div>
+                </div>
 
-<h1>⚡ eSSL Probe Dashboard - Fetch ALL Attendance Data</h1>
-
-<div class="container">
-
-    <!-- Left Column -->
-    <div>
-        <!-- Device Info -->
-        <div class="card">
-            <h2>Device Status & Controls
-                <span class="fetch-status {{ 'fetching' if fetching_all else 'idle' }}" id="fetchStatus">
-                    {{ 'FETCHING ALL LOGS' if fetching_all else 'IDLE' }}
-                </span>
-            </h2>
-            <div class="device-info">
-                <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
-                <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
-                <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
-                <div>Unique Users: <strong id="uniqueUsers">{{ unique_users }}</strong></div>
-                <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
-                <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
-            </div>
-            
-            <!-- Statistics -->
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-value" id="totalRecordsValue">{{ total_records }}</div>
-                    <div class="stat-label">Total Records</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="todayRecordsValue">{{ today_records }}</div>
-                    <div class="stat-label">Today</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="uniqueUsersValue">{{ unique_users }}</div>
-                    <div class="stat-label">Unique Users</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value" id="queueCount">{{ queue|length }}</div>
-                    <div class="stat-label">Queued</div>
-                </div>
-            </div>
-            
-            <!-- Aggressive Fetch Controls -->
-            <div class="warning-box">
-                <strong>⚠️ GET ALL ATTENDANCE LOGS</strong>
-                <p style="margin: 8px 0; font-size: 13px; opacity: 0.9;">
-                    This will send multiple "GET ATTLOG ALL" commands to fetch all existing logs from the device.
-                </p>
-                <div style="display: flex; gap: 10px; margin-top: 10px;">
-                    <a href="/force_fetch_all">
-                        <button class="btn-small btn-yellow">🚨 FORCE FETCH ALL LOGS</button>
-                    </a>
-                    <a href="/reset_device">
-                        <button class="btn-small btn-blue">Reset Connection</button>
-                    </a>
-                </div>
-            </div>
-            
-            <!-- Manual Command -->
-            <div class="card-header">
-                <h3>Send Manual Command</h3>
-            </div>
-            
-            <form method="post" action="/send_command">
-                <label>Endpoint</label>
-                <select name="endpoint">
-                    {% for ep in endpoints %}
-                    <option value="{{ep}}">{{ep}}</option>
-                    {% endfor %}
-                </select>
-
-                <label>Command</label>
-                <select name="command">
-                    {% for cmd in commands %}
-                    <option value="{{cmd}}">{{cmd}}</option>
-                    {% endfor %}
-                </select>
-
-                <button type="submit">Send</button>
-            </form>
-
-            <!-- Command Queue -->
-            <div style="margin-top: 20px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h3>Command Queue (<span id="queueCountValue">{{ queue|length }}</span>)</h3>
-                    <form method="post" action="/clear_queue" style="margin: 0;">
-                        <button type="submit" class="btn-small btn-red">Clear Queue</button>
-                    </form>
-                </div>
-                <div class="command-queue" id="commandQueue">
-                    {% if queue %}
-                        {% for cmd in queue %}
-                        <div class="queue-item">{{ cmd }}</div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="empty-queue">No commands in queue</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <!-- Device Logs -->
-        <div class="card">
-            <div class="card-header">
-                <h2>Device Communication Logs</h2>
-                <div>
-                    <form method="post" action="/clear_logs" style="display: inline;">
-                        <button type="submit" class="btn-small btn-red">Clear Logs</button>
-                    </form>
-                </div>
-            </div>
-            
-            <div class="refresh-controls">
-                <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
-                <label style="font-size: 12px;">
-                    <input type="checkbox" id="autoRefresh"> Auto-refresh every 5s
-                </label>
-                <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
-                    <span id="nextRefresh">Auto-refresh off</span>
-                </div>
-            </div>
-            
-            <div class="logs" id="logBox">
-                {% if logs %}
-                    {% for line in logs %}
-                    <div class="log-line">{{line}}</div>
-                    {% endfor %}
-                {% else %}
-                    <div class="empty-queue">No logs yet</div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-
-    <!-- Right Column -->
-    <div>
-        <!-- Attendance Data -->
-        <div class="card">
-            <div class="card-header">
-                <h2>Attendance Data (<span id="attendanceCountValue">{{ total_records }}</span> total records)</h2>
-                <div>
-                    <a href="/export_attendance?format=csv" target="_blank">
-                        <button class="btn-small btn-green">Export CSV</button>
-                    </a>
-                    <a href="/export_attendance?format=json" target="_blank">
-                        <button class="btn-small btn-green">Export JSON</button>
-                    </a>
-                    <form method="post" action="/clear_attendance" style="display: inline;">
-                        <button type="submit" class="btn-small btn-red" onclick="return confirm('Clear ALL attendance data?')">Clear Data</button>
-                    </form>
-                </div>
-            </div>
-            
-            <div class="filter-controls">
-                <div class="search-box">
-                    <input type="text" id="searchUser" placeholder="Search User ID..." oninput="filterAttendance()">
-                    <button class="btn-small" onclick="clearSearch()">Clear</button>
-                </div>
-                <div class="time-filter">
-                    <input type="date" id="dateFilter" onchange="filterAttendance()">
-                    <button class="btn-small" onclick="clearDateFilter()">Clear Date</button>
-                </div>
-            </div>
-            
-            <div class="tab-buttons">
-                <button class="tab-button active" onclick="switchTab('recentTab')">Recent (100)</button>
-                <button class="tab-button" onclick="switchTab('allTab')">All Records</button>
-                <button class="tab-button" onclick="switchTab('todayTab')">Today Only</button>
-            </div>
-            
-            <div id="recentTab" class="tab-content active">
-                <div class="logs" id="attBox" style="height: 380px;">
-                    {% if attendance %}
-                        {% for line in attendance %}
-                        <div class="att-line">{{line}}</div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">
-                            No attendance data received yet
+                <div class="mb-4">
+                    <p class="text-gray-600 text-sm mb-4">
+                        This fetches ALL historical attendance data from the biometric device.
+                        Use "Fetch All" to get complete attendance logs.
+                    </p>
+                    
+                    <!-- Command Queue -->
+                    <div class="bg-gray-100 rounded-lg p-3 mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-medium text-gray-700">Command Queue</span>
+                            <span id="queueCount" class="bg-gray-700 text-white px-2 py-1 rounded text-xs">
+                                {{ command_queue|length }} commands
+                            </span>
                         </div>
-                    {% endif %}
+                        <div id="commandQueue" class="text-sm">
+                            {% if command_queue %}
+                                {% for cmd in command_queue %}
+                                    <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded mb-1">{{ cmd }}</div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-gray-500 italic">No commands in queue</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Records Preview -->
+                <div class="mt-6">
+                    <h3 class="font-medium text-gray-700 mb-3">Recent Records (Last 100)</h3>
+                    <div class="max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                        {% if attendance_records %}
+                            {% for record in attendance_records|reverse %}
+                                <div class="attendance-row">
+                                    <div class="flex justify-between">
+                                        <span class="font-medium">User {{ record.user_id }}</span>
+                                        <span class="text-sm text-gray-500">{{ record.timestamp }}</span>
+                                    </div>
+                                    <div class="flex justify-between text-sm mt-1">
+                                        <span class="px-2 py-1 rounded bg-gray-200">
+                                            {{ record.status_text }}
+                                        </span>
+                                        <span class="text-gray-600">
+                                            {{ record.verification }} • {{ record.workcode }}
+                                        </span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-gray-500 py-8">
+                                <i class="fas fa-inbox text-3xl mb-2"></i>
+                                <p>No attendance records yet</p>
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
-            
-            <div id="allTab" class="tab-content">
-                <div class="logs" id="allAttBox" style="height: 380px;">
-                    <div class="empty-queue">Loading all records...</div>
+
+            <!-- CARD 2: LIVE ATTENDANCE -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-bolt mr-2 text-green-600"></i>
+                            Live Attendance
+                        </h2>
+                        <span class="status-badge status-live">
+                            <i class="fas fa-circle animate-pulse mr-1"></i>
+                            {{ live_records }} Today
+                        </span>
+                    </div>
+                    <button onclick="refreshLiveAttendance()" 
+                            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                        <i class="fas fa-redo mr-2"></i>
+                        Refresh
+                    </button>
                 </div>
-            </div>
-            
-            <div id="todayTab" class="tab-content">
-                <div class="logs" id="todayAttBox" style="height: 380px;">
-                    <div class="empty-queue">Loading today's records...</div>
+
+                <div class="mb-4">
+                    <p class="text-gray-600 text-sm mb-4">
+                        Real-time attendance data from the biometric device.
+                        Updates automatically when device sends new records.
+                    </p>
+                    
+                    <!-- Live Stats -->
+                    <div class="grid grid-cols-3 gap-4 mb-6">
+                        <div class="bg-blue-50 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-blue-700" id="checkins">0</div>
+                            <div class="text-sm text-blue-600">Check-ins</div>
+                        </div>
+                        <div class="bg-green-50 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-green-700" id="checkouts">0</div>
+                            <div class="text-sm text-green-600">Check-outs</div>
+                        </div>
+                        <div class="bg-purple-50 p-4 rounded-lg text-center">
+                            <div class="text-2xl font-bold text-purple-700" id="uniqueUsers">0</div>
+                            <div class="text-sm text-purple-600">Unique Users</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Attendance List -->
+                <div>
+                    <h3 class="font-medium text-gray-700 mb-3">Today's Attendance</h3>
+                    <div class="max-h-96 overflow-y-auto border rounded-lg p-3 bg-gray-50" id="liveAttendanceList">
+                        {% if live_attendance %}
+                            {% for record in live_attendance|reverse %}
+                                <div class="attendance-row">
+                                    <div class="flex justify-between">
+                                        <span class="font-medium">User {{ record.user_id }}</span>
+                                        <span class="text-sm text-gray-500">
+                                            {{ record.timestamp.split('T')[1][:8] }}
+                                        </span>
+                                    </div>
+                                    <div class="flex justify-between text-sm mt-1">
+                                        <span class="px-2 py-1 rounded 
+                                            {% if record.status == '0' %}bg-green-100 text-green-800
+                                            {% elif record.status == '1' %}bg-red-100 text-red-800
+                                            {% else %}bg-gray-200 text-gray-800{% endif %}">
+                                            {{ record.status_text }}
+                                        </span>
+                                        <span class="text-gray-600">
+                                            {{ record.verification }}
+                                        </span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center text-gray-500 py-8">
+                                <i class="fas fa-clock text-3xl mb-2"></i>
+                                <p>No attendance today yet</p>
+                            </div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Actions -->
-        <div class="card">
-            <h2>Quick Actions</h2>
-            
-            <div class="action-buttons">
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="GET ATTLOG ALL">
-                    <button type="submit" class="btn-small">📥 Get ALL Attendance</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="FORCE GET ALL LOGS">
-                    <button type="submit" class="btn-small btn-yellow">🚨 Force Fetch ALL</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="INFO">
-                    <button type="submit" class="btn-small">📱 Device Info</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="GET OPTION">
-                    <button type="submit" class="btn-small">⚙️ Get Options</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="SET OPTION RTLOG=1">
-                    <button type="submit" class="btn-small">⚡ Enable RTLOG</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="SET OPTION PUSH=1">
-                    <button type="submit" class="btn-small">📲 Enable PUSH</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="GET USERINFO ALL">
-                    <button type="submit" class="btn-small">👥 Get Users</button>
-                </form>
-                <form method="post" action="/send_command" style="margin: 0;">
-                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
-                    <input type="hidden" name="command" value="REBOOT">
-                    <button type="submit" class="btn-small btn-purple" onclick="return confirm('Reboot device?')">🔄 Reboot</button>
-                </form>
+        <!-- Logs Panel -->
+        <div class="card mt-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold text-gray-800">
+                    <i class="fas fa-terminal mr-2 text-gray-600"></i>
+                    System Logs
+                </h3>
+                <button onclick="clearLogs()" class="text-sm text-red-600 hover:text-red-800">
+                    <i class="fas fa-trash mr-1"></i> Clear
+                </button>
             </div>
-            
-            <div style="margin-top: 15px; text-align: center;">
-                <a href="/get_all_attendance" target="_blank">
-                    <button class="btn-small btn-green">API View</button>
-                </a>
-                <button class="btn-small btn-blue" onclick="location.reload()">Reload Page</button>
+            <div class="bg-gray-900 text-green-400 font-mono text-sm rounded-lg p-4 max-h-48 overflow-y-auto" id="logPanel">
+                {% for log in logs %}
+                    <div class="mb-1">{{ log }}</div>
+                {% endfor %}
             </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>eSSL Attendance Fetcher • Simple tool for biometric device data</p>
+            <p class="mt-1">Total Records: <span id="totalRecordsCount">{{ total_records }}</span> | 
+                           Live Today: <span id="liveRecordsCount">{{ live_records }}</span></p>
+        </footer>
     </div>
 
-    <footer>
-        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage
-    </footer>
-
-</div>
-
-<script>
-    // Global variables
-    let refreshInterval;
-    let refreshCountdown = 5;
-    let isAutoRefresh = false;
-    let currentTab = 'recentTab';
-    let allAttendanceData = [];
-    let filteredAttendance = [];
-
-    // Auto-scroll logs to bottom
-    const logBox = document.getElementById("logBox");
-    const attBox = document.getElementById("attBox");
-    
-    if (logBox) logBox.scrollTop = logBox.scrollHeight;
-    if (attBox) attBox.scrollTop = attBox.scrollHeight;
-    
-    // Function to update data via AJAX
-    async function refreshData() {
-        try {
-            const response = await fetch('/get_logs');
-            const data = await response.json();
+    <script>
+        // Initialize stats
+        function updateStats() {
+            const checkins = document.querySelectorAll('.status-badge.status-live').length;
+            const checkouts = document.querySelectorAll('.status-badge.status-historical').length;
+            const uniqueUsers = new Set([...document.querySelectorAll('.attendance-row .font-medium')]
+                .map(el => el.textContent.replace('User ', ''))).size;
             
-            // Update logs
-            const logBox = document.getElementById('logBox');
-            if (logBox && data.logs) {
-                logBox.innerHTML = data.logs.map(line => 
-                    `<div class="log-line">${line}</div>`
-                ).join('');
-                logBox.scrollTop = logBox.scrollHeight;
+            document.getElementById('checkins').textContent = checkins;
+            document.getElementById('checkouts').textContent = checkouts;
+            document.getElementById('uniqueUsers').textContent = uniqueUsers;
+        }
+        
+        // Fetch all attendance from device
+        async function fetchAllAttendance() {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Fetching...';
+            btn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/fetch/all', { method: 'POST' });
+                const result = await response.json();
+                
+                alert(`Started fetching all attendance\n${result.message}\nCommands queued: ${result.commands_queued}`);
+                
+                // Refresh queue display
+                refreshQueue();
+                
+            } catch (error) {
+                alert('Error fetching attendance: ' + error.message);
+            } finally {
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 2000);
             }
+        }
+        
+        // Refresh live attendance
+        async function refreshLiveAttendance() {
+            const btn = event.target;
+            const originalText = btn.innerHTML;
             
-            // Update attendance in recent tab
-            const attBox = document.getElementById('attBox');
-            if (attBox && data.attendance) {
-                if (data.attendance.length > 0) {
-                    attBox.innerHTML = data.attendance.map(line => 
-                        `<div class="att-line">${line}</div>`
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Refreshing...';
+            
+            try {
+                const response = await fetch('/api/attendance/live');
+                const data = await response.json();
+                
+                // Update live attendance list
+                const container = document.getElementById('liveAttendanceList');
+                container.innerHTML = '';
+                
+                if (data.data.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fas fa-clock text-3xl mb-2"></i>
+                            <p>No attendance today yet</p>
+                        </div>
+                    `;
+                } else {
+                    data.data.slice(-50).reverse().forEach(record => {
+                        const time = record.timestamp.split('T')[1]?.substring(0, 8) || record.timestamp;
+                        const statusClass = record.status === '0' ? 'bg-green-100 text-green-800' :
+                                          record.status === '1' ? 'bg-red-100 text-red-800' :
+                                          'bg-gray-200 text-gray-800';
+                                        
+                        container.innerHTML += `
+                            <div class="attendance-row">
+                                <div class="flex justify-between">
+                                    <span class="font-medium">User ${record.user_id}</span>
+                                    <span class="text-sm text-gray-500">${time}</span>
+                                </div>
+                                <div class="flex justify-between text-sm mt-1">
+                                    <span class="px-2 py-1 rounded ${statusClass}">
+                                        ${record.status_text}
+                                    </span>
+                                    <span class="text-gray-600">${record.verification}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                // Update counters
+                document.getElementById('liveRecordsCount').textContent = data.count;
+                updateStats();
+                
+            } catch (error) {
+                console.error('Error refreshing live attendance:', error);
+            } finally {
+                btn.innerHTML = originalText;
+            }
+        }
+        
+        // Refresh command queue
+        async function refreshQueue() {
+            try {
+                const response = await fetch('/api/command/queue');
+                const data = await response.json();
+                
+                const container = document.getElementById('commandQueue');
+                const countElement = document.getElementById('queueCount');
+                
+                countElement.textContent = `${data.count} commands`;
+                
+                if (data.queue.length === 0) {
+                    container.innerHTML = '<div class="text-gray-500 italic">No commands in queue</div>';
+                } else {
+                    container.innerHTML = data.queue.map(cmd => 
+                        `<div class="bg-blue-100 text-blue-800 px-3 py-1 rounded mb-1">${cmd}</div>`
                     ).join('');
-                } else {
-                    attBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data received yet</div>';
                 }
-                attBox.scrollTop = attBox.scrollHeight;
+                
+            } catch (error) {
+                console.error('Error refreshing queue:', error);
             }
-            
-            // Update command queue
-            const queueDiv = document.getElementById('commandQueue');
-            if (queueDiv && data.queue) {
-                if (data.queue.length > 0) {
-                    queueDiv.innerHTML = data.queue.map(cmd => 
-                        `<div class="queue-item">${cmd}</div>`
-                    ).join('');
-                } else {
-                    queueDiv.innerHTML = '<div class="empty-queue">No commands in queue</div>';
-                }
-            }
-            
-            // Update counters
-            document.getElementById('logsCount').textContent = data.logs_count;
-            document.getElementById('totalRecords').textContent = data.attendance_count;
-            document.getElementById('totalRecordsValue').textContent = data.attendance_count;
-            document.getElementById('todayRecords').textContent = data.today_count;
-            document.getElementById('todayRecordsValue').textContent = data.today_count;
-            document.getElementById('uniqueUsers').textContent = data.unique_users;
-            document.getElementById('uniqueUsersValue').textContent = data.unique_users;
-            document.getElementById('queueCount').textContent = data.queue_count;
-            document.getElementById('queueCountValue').textContent = data.queue_count;
-            document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
-            document.getElementById('attendanceCountValue').textContent = data.attendance_count;
-            
-            // Update fetch status
-            const fetchStatus = document.getElementById('fetchStatus');
-            if (fetchStatus) {
-                if (data.fetching_all) {
-                    fetchStatus.className = 'fetch-status fetching';
-                    fetchStatus.textContent = 'FETCHING ALL LOGS';
-                } else {
-                    fetchStatus.className = 'fetch-status idle';
-                    fetchStatus.textContent = 'IDLE';
-                }
-            }
-            
-            // Update last update time
-            const now = new Date();
-            const formattedTime = now.toLocaleString('en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: true
-            });
-            document.getElementById('lastUpdate').textContent = formattedTime;
-            
-            // Reset countdown if auto-refresh is enabled
-            if (isAutoRefresh) {
-                refreshCountdown = 5;
-            }
-            
-        } catch (error) {
-            console.error('Error refreshing data:', error);
         }
-    }
-    
-    // Function to load all attendance data
-    async function loadAllAttendance() {
-        try {
-            const response = await fetch('/get_all_attendance');
-            const data = await response.json();
-            allAttendanceData = data.data || [];
-            filteredAttendance = [...allAttendanceData];
-            
-            // Display in all tab
-            const allAttBox = document.getElementById('allAttBox');
-            if (allAttBox) {
-                if (allAttendanceData.length > 0) {
-                    allAttBox.innerHTML = allAttendanceData.map(record => 
-                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                    ).join('');
-                    allAttBox.scrollTop = allAttBox.scrollHeight;
-                } else {
-                    allAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data available</div>';
-                }
-            }
-            
-        } catch (error) {
-            console.error('Error loading all attendance:', error);
-        }
-    }
-    
-    // Function to load today's attendance
-    function loadTodayAttendance() {
-        const today = new Date().toISOString().split('T')[0];
-        const todayData = allAttendanceData.filter(record => 
-            record.timestamp && record.timestamp.startsWith(today)
-        );
         
-        const todayAttBox = document.getElementById('todayAttBox');
-        if (todayAttBox) {
-            if (todayData.length > 0) {
-                todayAttBox.innerHTML = todayData.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                ).join('');
-                todayAttBox.scrollTop = todayAttBox.scrollHeight;
-            } else {
-                todayAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
-            }
+        // Clear logs
+        function clearLogs() {
+            document.getElementById('logPanel').innerHTML = '';
         }
-    }
-    
-    // Function to filter attendance
-    function filterAttendance() {
-        const searchTerm = document.getElementById('searchUser').value.toLowerCase();
-        const dateFilter = document.getElementById('dateFilter').value;
         
-        filteredAttendance = allAttendanceData.filter(record => {
-            const matchesSearch = !searchTerm || 
-                record.user_id.toLowerCase().includes(searchTerm) ||
-                record.raw.toLowerCase().includes(searchTerm);
+        // Add log entry
+        function addLog(message) {
+            const logPanel = document.getElementById('logPanel');
+            const timestamp = new Date().toLocaleTimeString();
+            logPanel.innerHTML += `<div class="mb-1">[${timestamp}] ${message}</div>`;
+            logPanel.scrollTop = logPanel.scrollHeight;
+        }
+        
+        // Auto-refresh queue every 10 seconds
+        setInterval(refreshQueue, 10000);
+        
+        // Auto-refresh live attendance every 30 seconds
+        setInterval(refreshLiveAttendance, 30000);
+        
+        // Initialize stats on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            updateStats();
             
-            const matchesDate = !dateFilter || 
-                (record.timestamp && record.timestamp.startsWith(dateFilter));
-            
-            return matchesSearch && matchesDate;
+            // Add welcome log
+            addLog('Dashboard loaded successfully');
+            addLog(`Device: ${document.getElementById('deviceSn').textContent}`);
+            addLog(`Total records: ${document.getElementById('totalRecordsCount').textContent}`);
         });
-        
-        // Update current tab
-        updateCurrentTab();
-    }
-    
-    // Function to update current tab
-    function updateCurrentTab() {
-        const containerId = currentTab + 'Box';
-        const container = document.getElementById(containerId);
-        
-        if (!container) return;
-        
-        if (currentTab === 'allTab') {
-            if (filteredAttendance.length > 0) {
-                container.innerHTML = filteredAttendance.map(record => 
-                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
-                ).join('');
-            } else {
-                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No matching records found</div>';
-            }
-        }
-    }
-    
-    // Function to clear search
-    function clearSearch() {
-        document.getElementById('searchUser').value = '';
-        filterAttendance();
-    }
-    
-    // Function to clear date filter
-    function clearDateFilter() {
-        document.getElementById('dateFilter').value = '';
-        filterAttendance();
-    }
-    
-    // Function to switch tabs
-    function switchTab(tabName) {
-        currentTab = tabName;
-        
-        // Update tab buttons
-        document.querySelectorAll('.tab-button').forEach(btn => {
-            btn.classList.remove('active');
-        });
-        document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
-        
-        // Update tab content
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.remove('active');
-        });
-        document.getElementById(tabName).classList.add('active');
-        
-        // Load data for tab if needed
-        if (tabName === 'allTab' && allAttendanceData.length === 0) {
-            loadAllAttendance();
-        } else if (tabName === 'todayTab') {
-            loadTodayAttendance();
-        } else if (tabName === 'allTab') {
-            filterAttendance();
-        }
-    }
-    
-    // Function to update countdown
-    function updateCountdown() {
-        if (isAutoRefresh) {
-            refreshCountdown--;
-            document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
-            
-            if (refreshCountdown <= 0) {
-                refreshData();
-                refreshCountdown = 5;
-            }
-        }
-    }
-    
-    // Initialize auto-refresh
-    function initAutoRefresh() {
-        const autoRefreshCheckbox = document.getElementById('autoRefresh');
-        if (autoRefreshCheckbox) {
-            isAutoRefresh = autoRefreshCheckbox.checked;
-            
-            // Clear existing interval
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-            }
-            
-            // Set up new interval if auto-refresh is enabled
-            if (isAutoRefresh) {
-                refreshInterval = setInterval(updateCountdown, 1000);
-                document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
-            } else {
-                document.getElementById('nextRefresh').textContent = 'Auto-refresh off';
-            }
-            
-            // Add event listener for checkbox
-            autoRefreshCheckbox.addEventListener('change', function() {
-                isAutoRefresh = this.checked;
-                if (isAutoRefresh) {
-                    refreshCountdown = 5;
-                    refreshInterval = setInterval(updateCountdown, 1000);
-                    document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
-                } else {
-                    clearInterval(refreshInterval);
-                    document.getElementById('nextRefresh').textContent = 'Auto-refresh off';
-                }
-            });
-        }
-    }
-    
-    // Initialize on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        initAutoRefresh();
-        
-        // Load all attendance data initially
-        loadAllAttendance();
-        
-        // Refresh when page becomes visible
-        document.addEventListener('visibilitychange', function() {
-            if (!document.hidden) {
-                refreshData();
-                if (currentTab === 'allTab') {
-                    loadAllAttendance();
-                }
-            }
-        });
-        
-        // Auto-refresh data every 30 seconds even without checkbox
-        setInterval(refreshData, 30000);
-    });
-    
-    // Manual refresh button
-    window.refreshData = refreshData;
-    window.switchTab = switchTab;
-    window.filterAttendance = filterAttendance;
-    window.clearSearch = clearSearch;
-    window.clearDateFilter = clearDateFilter;
-</script>
-
+    </script>
 </body>
 </html>
