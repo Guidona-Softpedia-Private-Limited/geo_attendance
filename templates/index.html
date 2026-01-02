@@ -438,7 +438,11 @@
                                                 {% if record.status == '1' %}text-red-600 
                                                 {% elif record.status == '0' %}text-green-600 
                                                 {% else %}text-blue-600{% endif %}">
-                                                {{ record.device_sn|last(4) }}
+                                                {% if record.device_sn and record.device_sn|length > 4 %}
+                                                    {{ record.device_sn[-4:] }}
+                                                {% else %}
+                                                    {{ record.device_sn }}
+                                                {% endif %}
                                             </span>
                                         </div>
                                         <div class="ml-3">
@@ -1059,7 +1063,7 @@
                                             ${record.status === '1' ? 'text-red-600' : 
                                               record.status === '0' ? 'text-green-600' : 
                                               'text-blue-600'}">
-                                            ${record.device_sn ? record.device_sn.slice(-4) : 'N/A'}
+                                            ${record.device_sn && record.device_sn.length > 4 ? record.device_sn.slice(-4) : (record.device_sn || 'N/A')}
                                         </span>
                                     </div>
                                     <div class="ml-3">
@@ -1309,6 +1313,4 @@
         });
     </script>
 </body>
-
-
 </html>
