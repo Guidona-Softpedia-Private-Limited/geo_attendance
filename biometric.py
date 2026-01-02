@@ -190,8 +190,6 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
     # Clean up SN - remove any B prefix if present, but keep track
     original_sn = sn
     display_sn = sn
-    if sn.startswith('B') and len(sn) > 12:
-        display_sn = sn[1:]  # Remove the B prefix for display
     
     # Find existing device by both original and display SN
     device_index = -1
