@@ -7,73 +7,129 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* ... existing styles ... */
-        
-        /* Add new styles for status override */
-        .status-override-control {
-            background: #f8fafc;
-            border-radius: 8px;
-            padding: 12px;
-            margin-top: 10px;
-            border: 1px solid #e2e8f0;
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            transition: transform 0.2s;
         }
-        .status-radio-group {
-            display: flex;
-            gap: 12px;
-            margin-top: 8px;
+        .card:hover {
+            transform: translateY(-2px);
         }
-        .status-radio-label {
-            display: flex;
-            align-items: center;
-            cursor: pointer;
-            padding: 6px 12px;
+        .device-card {
+            border-left: 4px solid;
+            transition: all 0.3s;
+        }
+        .device-active {
+            border-left-color: #10b981;
+        }
+        .device-inactive {
+            border-left-color: #ef4444;
+            opacity: 0.7;
+        }
+        .raw-data-container {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #f0f0f0;
             border-radius: 6px;
-            background: #f1f5f9;
+            padding: 15px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 12px;
+            border: 1px solid #333;
+        }
+        .data-line {
+            border-bottom: 1px solid #2d2d2d;
+            padding: 4px 0;
+            margin: 2px 0;
+        }
+        .data-line:hover {
+            background: #2d2d2d;
+        }
+        .hex-view {
+            color: #4ade80;
+        }
+        .ascii-view {
+            color: #60a5fa;
+        }
+        .tab-button {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
             transition: all 0.2s;
         }
-        .status-radio-label:hover {
-            background: #e2e8f0;
-        }
-        .status-radio-label input:checked + span {
-            font-weight: 600;
-        }
-        .status-checkin-radio:checked + span {
-            color: #10b981;
-        }
-        .status-checkout-radio:checked + span {
-            color: #ef4444;
-        }
-        .status-breakout-radio:checked + span {
-            color: #f59e0b;
-        }
-        .status-breakin-radio:checked + span {
-            color: #8b5cf6;
-        }
-        .apply-status-btn {
-            margin-top: 10px;
-            padding: 6px 12px;
+        .tab-button.active {
             background: #3b82f6;
             color: white;
-            border-radius: 6px;
-            border: none;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background 0.2s;
         }
-        .apply-status-btn:hover {
-            background: #2563eb;
+        .tab-content {
+            display: none;
         }
-        
-        /* Style for BOCK device */
-        .bock-device {
-            border: 2px solid #ef4444;
-            background: #fef2f2;
+        .tab-content.active {
+            display: block;
         }
-        .bock-device .device-header {
-            background: #fee2e2;
-            padding: 8px;
-            border-radius: 6px;
-            margin-bottom: 10px;
+        .device-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .status-online {
+            background: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+        .status-offline {
+            background: #ef4444;
+        }
+        .blink {
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .log-timestamp {
+            color: #9ca3af;
+            font-family: monospace;
+            font-size: 11px;
+            min-width: 140px;
+        }
+        .log-message {
+            word-break: break-word;
+        }
+        .status-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-checkin {
+            background: #10b981;
+            color: white;
+        }
+        .status-checkout {
+            background: #ef4444;
+            color: white;
+        }
+        .status-breakout {
+            background: #f59e0b;
+            color: white;
+        }
+        .status-breakin {
+            background: #8b5cf6;
+            color: white;
+        }
+        .status-other {
+            background: #6b7280;
+            color: white;
         }
     </style>
 </head>
@@ -132,36 +188,33 @@
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {% for device in devices %}
-                <div class="device-card {% if device.last_seen_seconds < 300 %}device-active{% else %}device-inactive{% endif %} p-4 bg-white rounded-lg shadow border border-gray-200 {% if 'BOCK194560212' in device.sn %}bock-device{% endif %}">
-                    <div class="{% if 'BOCK194560212' in device.sn %}device-header{% endif %}">
-                        <div class="flex justify-between items-start mb-2">
-                            <div>
-                                <h3 class="font-bold text-lg text-gray-800 mb-1">
-                                    <span class="device-status {% if device.last_seen_seconds < 300 %}status-online blink{% else %}status-offline{% endif %}"></span>
-                                    {% if "BOCK" in device.sn or "560212" in device.sn %}
-                                        {{ device.sn }}
-                                        {% if 'BOCK194560212' in device.sn %}<span class="ml-2 text-xs bg-red-100 text-red-700 px-2 py-1 rounded">Special Device</span>{% endif %}
-                                    {% else %}
-                                        Device: {{ device.sn }}
-                                    {% endif %}
-                                </h3>
-                                <div class="text-sm text-gray-600">
-                                    <span class="inline-block mr-4"><i class="fas fa-calendar mr-1"></i>{{ device.first_seen }}</span>
-                                    <span class="inline-block"><i class="fas fa-clock mr-1"></i>{{ device.last_seen }}</span>
-                                </div>
+                <div class="device-card {% if device.last_seen_seconds < 300 %}device-active{% else %}device-inactive{% endif %} p-4 bg-white rounded-lg shadow border border-gray-200">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="font-bold text-lg text-gray-800 mb-1">
+                                <span class="device-status {% if device.last_seen_seconds < 300 %}status-online blink{% else %}status-offline{% endif %}"></span>
+                                {% if "BOCK" in device.sn or "560212" in device.sn %}
+                                    {{ device.sn }}
+                                {% else %}
+                                    Device: {{ device.sn }}
+                                {% endif %}
+                            </h3>
+                            <div class="text-sm text-gray-600">
+                                <span class="inline-block mr-4"><i class="fas fa-calendar mr-1"></i>{{ device.first_seen }}</span>
+                                <span class="inline-block"><i class="fas fa-clock mr-1"></i>{{ device.last_seen }}</span>
                             </div>
-                            <div class="text-right">
-                                <div class="text-sm font-medium {% if device.last_seen_seconds < 300 %}text-green-600{% else %}text-red-600{% endif %}">
-                                    {% if device.last_seen_seconds < 60 %}
-                                        Just now
-                                    {% elif device.last_seen_seconds < 300 %}
-                                        {{ (device.last_seen_seconds/60)|int }} min ago
-                                    {% else %}
-                                        {{ (device.last_seen_seconds/3600)|int }} hours ago
-                                    {% endif %}
-                                </div>
-                                <div class="text-xs text-gray-500 mt-1">Status</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-sm font-medium {% if device.last_seen_seconds < 300 %}text-green-600{% else %}text-red-600{% endif %}">
+                                {% if device.last_seen_seconds < 60 %}
+                                    Just now
+                                {% elif device.last_seen_seconds < 300 %}
+                                    {{ (device.last_seen_seconds/60)|int }} min ago
+                                {% else %}
+                                    {{ (device.last_seen_seconds/3600)|int }} hours ago
+                                {% endif %}
                             </div>
+                            <div class="text-xs text-gray-500 mt-1">Status</div>
                         </div>
                     </div>
 
@@ -184,42 +237,7 @@
                         </div>
                     </div>
 
-                    <!-- Status Override Control (only for BOCK194560212) -->
-                    {% if 'BOCK194560212' in device.sn %}
-                    <div class="status-override-control">
-                        <div class="text-sm font-medium text-gray-700 mb-2">
-                            <i class="fas fa-cog mr-2 text-blue-600"></i>
-                            Status Override Settings
-                        </div>
-                        <div class="status-radio-group">
-                            <label class="status-radio-label">
-                                <input type="radio" name="status_{{ device.sn }}" value="1" 
-                                       class="status-checkout-radio mr-2" checked>
-                                <span class="text-red-600">Check-out</span>
-                            </label>
-                            <label class="status-radio-label">
-                                <input type="radio" name="status_{{ device.sn }}" value="0" 
-                                       class="status-checkin-radio mr-2">
-                                <span class="text-green-600">Check-in</span>
-                            </label>
-                            <label class="status-radio-label">
-                                <input type="radio" name="status_{{ device.sn }}" value="2" 
-                                       class="status-breakout-radio mr-2">
-                                <span class="text-yellow-600">Break-out</span>
-                            </label>
-                            <label class="status-radio-label">
-                                <input type="radio" name="status_{{ device.sn }}" value="3" 
-                                       class="status-breakin-radio mr-2">
-                                <span class="text-purple-600">Break-in</span>
-                            </label>
-                        </div>
-                        <button onclick="applyStatusOverride('{{ device.sn }}')" class="apply-status-btn">
-                            <i class="fas fa-check mr-1"></i> Apply Status
-                        </button>
-                    </div>
-                    {% endif %}
-
-                    <div class="flex gap-2 mt-4">
+                    <div class="flex gap-2">
                         <button onclick="sendDeviceCommand('{{ device.sn }}', 'GET ATTLOG ALL')" 
                                 class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
                             <i class="fas fa-download mr-2"></i>Get ALL Data
@@ -252,7 +270,130 @@
             </div>
         </div>
 
-        <!-- RECENT ATTENDANCE RECORDS (Moved here after Connected Devices) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- RAW DATA MONITOR -->
+            <div class="card lg:col-span-2">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-code mr-2 text-green-600"></i>
+                            Raw Data Monitor
+                        </h2>
+                        <div class="text-sm text-gray-600 mt-1">Complete raw body from device communications</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button onclick="setDataView('hex')" id="hexTab" class="tab-button active">Hex</button>
+                            <button onclick="setDataView('ascii')" id="asciiTab" class="tab-button">ASCII</button>
+                            <button onclick="setDataView('raw')" id="rawTab" class="tab-button">Raw</button>
+                        </div>
+                        <button onclick="clearRawData()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                            <i class="fas fa-trash mr-2"></i>Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span id="currentDevice">All Devices</span>
+                        <span id="dataStats">0 bytes, 0 lines</span>
+                    </div>
+                    <div class="raw-data-container" id="rawDataContainer">
+                        {% if recent_raw_data %}
+                            {% for data in recent_raw_data %}
+                            <div class="data-line">
+                                <div class="text-xs text-gray-500 mb-1">
+                                    [{{ data.timestamp }}] {{ data.device_sn }} ({{ data.length }} bytes)
+                                </div>
+                                <div class="hex-view">
+                                    {{ data.hex_preview }}
+                                </div>
+                                <div class="ascii-view mt-1">
+                                    {{ data.ascii_preview }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-gray-500 text-center py-8">
+                                <i class="fas fa-database text-3xl mb-3"></i>
+                                <p>No raw data received yet</p>
+                                <p class="text-sm mt-1">Waiting for device communications...</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-4 text-center">
+                    <div class="bg-blue-50 p-3 rounded">
+                        <div class="text-lg font-bold text-blue-600" id="totalBytes">{{ total_data_bytes }}</div>
+                        <div class="text-xs text-blue-500">Total Bytes</div>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded">
+                        <div class="text-lg font-bold text-green-600" id="totalComms">{{ total_comms }}</div>
+                        <div class="text-xs text-green-500">Communications</div>
+                    </div>
+                    <div class="bg-purple-50 p-3 rounded">
+                        <div class="text-lg font-bold text-purple-600" id="lastComms">0</div>
+                        <div class="text-xs text-purple-500">Last 5 min</div>
+                    </div>
+                    <div class="bg-orange-50 p-3 rounded">
+                        <div class="text-lg font-bold text-orange-600" id="dataRate">0/s</div>
+                        <div class="text-xs text-orange-500">Data Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUICK ACTIONS -->
+            <div class="card">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>
+                    Quick Actions
+                </h2>
+                
+                <div class="space-y-3">
+                    <button onclick="fetchAllDevices()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Fetch ALL Devices Data</span>
+                        <i class="fas fa-download"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get ALL Attendance Logs</span>
+                        <i class="fas fa-history"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get All Device Info</span>
+                        <i class="fas fa-info-circle"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Reboot All Devices</span>
+                        <i class="fas fa-power-off"></i>
+                    </button>
+                    
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-gray-700 mb-3">Manual Command</h3>
+                        <div class="flex gap-2">
+                            <input type="text" id="manualCommand" placeholder="e.g., GET ATTLOG ALL" 
+                                   class="flex-1 p-2 border border-gray-300 rounded text-sm" value="GET ATTLOG ALL">
+                            <button onclick="sendManualCommand()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <p>Common Commands:</p>
+                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
+                            <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
+                            <p class="font-mono text-xs">GET OPTION - Get device settings</p>
+                            <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
+                            <p class="font-mono text-xs">REBOOT - Restart device</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ATTENDANCE RECORDS -->
         <div class="card mt-6">
             <div class="flex justify-between items-center mb-6">
                 <div>
@@ -289,33 +430,25 @@
                     <tbody class="bg-white divide-y divide-gray-200" id="attendanceTable">
                         {% if recent_attendance %}
                             {% for record in recent_attendance %}
-                            {% set is_bock_device = 'BOCK194560212' in record.device_sn %}
-                            <tr class="hover:bg-gray-50 
-                                {% if record.status == '1' %}bg-red-50
-                                {% elif record.status == '0' %}bg-green-50
-                                {% elif is_bock_device %}bg-blue-50
-                                {% endif %}">
+                            <tr class="hover:bg-gray-50 {% if record.status == '1' %}bg-red-50{% elif record.status == '0' %}bg-green-50{% endif %}">
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="flex items-center">
                                         <div class="flex-shrink-0 h-8 w-8 rounded-full 
                                             {% if record.status == '1' %}bg-red-100 
                                             {% elif record.status == '0' %}bg-green-100 
-                                            {% elif is_bock_device %}bg-blue-100
-                                            {% else %}bg-gray-100{% endif %} 
+                                            {% else %}bg-blue-100{% endif %} 
                                             flex items-center justify-center">
                                             <span class="text-xs font-bold 
                                                 {% if record.status == '1' %}text-red-600 
                                                 {% elif record.status == '0' %}text-green-600 
-                                                {% elif is_bock_device %}text-blue-600
-                                                {% else %}text-gray-600{% endif %}">
+                                                {% else %}text-blue-600{% endif %}">
                                                 {{ record.device_sn|last(4) }}
                                             </span>
                                         </div>
                                         <div class="ml-3">
                                             <div class="text-sm font-medium text-gray-900">
-                                                {% if is_bock_device %}
-                                                    <span class="text-blue-600 font-bold">{{ record.device_name }}</span>
-                                                    <span class="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">BOCK</span>
+                                                {% if "BOCK" in record.device_sn or "560212" in record.device_sn %}
+                                                    {{ record.device_name }}
                                                 {% else %}
                                                     {{ record.device_name }}
                                                 {% endif %}
@@ -334,34 +467,16 @@
                                     <div class="text-sm font-bold text-gray-900">{{ record.display_time }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    {% if is_bock_device %}
-                                        <!-- For BOCK device, always show check-out by default -->
-                                        {% if record.override_status %}
-                                            {% if record.override_status == '0' %}
-                                                <span class="status-badge status-checkin">Check-in</span>
-                                            {% elif record.override_status == '1' %}
-                                                <span class="status-badge status-checkout">Check-out</span>
-                                            {% elif record.override_status == '2' %}
-                                                <span class="status-badge status-breakout">Break-out</span>
-                                            {% elif record.override_status == '3' %}
-                                                <span class="status-badge status-breakin">Break-in</span>
-                                            {% endif %}
-                                        {% else %}
-                                            <span class="status-badge status-checkout">Check-out</span>
-                                        {% endif %}
+                                    {% if record.status == '0' %}
+                                        <span class="status-badge status-checkin">Check-in</span>
+                                    {% elif record.status == '1' %}
+                                        <span class="status-badge status-checkout">Check-out</span>
+                                    {% elif record.status == '2' %}
+                                        <span class="status-badge status-breakout">Break-out</span>
+                                    {% elif record.status == '3' %}
+                                        <span class="status-badge status-breakin">Break-in</span>
                                     {% else %}
-                                        <!-- Normal status display for other devices -->
-                                        {% if record.status == '0' %}
-                                            <span class="status-badge status-checkin">Check-in</span>
-                                        {% elif record.status == '1' %}
-                                            <span class="status-badge status-checkout">Check-out</span>
-                                        {% elif record.status == '2' %}
-                                            <span class="status-badge status-breakout">Break-out</span>
-                                        {% elif record.status == '3' %}
-                                            <span class="status-badge status-breakin">Break-in</span>
-                                        {% else %}
-                                            <span class="status-badge status-other">{{ record.status_text }}</span>
-                                        {% endif %}
+                                        <span class="status-badge status-other">{{ record.status_text }}</span>
                                     {% endif %}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -371,16 +486,9 @@
                                     {{ record.workcode }}
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex gap-2">
-                                        <button onclick="viewRecordRawData('{{ record.raw_data_hash }}')" class="text-blue-600 hover:text-blue-900 text-sm">
-                                            <i class="fas fa-eye mr-1"></i>View
-                                        </button>
-                                        {% if is_bock_device %}
-                                        <button onclick="overrideRecordStatus('{{ record.id }}')" class="text-green-600 hover:text-green-900 text-sm">
-                                            <i class="fas fa-edit mr-1"></i>Edit Status
-                                        </button>
-                                        {% endif %}
-                                    </div>
+                                    <button onclick="viewRecordRawData('{{ record.raw_data_hash }}')" class="text-blue-600 hover:text-blue-900 text-sm">
+                                        <i class="fas fa-eye mr-1"></i>View
+                                    </button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -411,28 +519,48 @@
                         <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-red-600 rounded mr-1"></span> Check-out</span>
                         <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-yellow-600 rounded mr-1"></span> Break-out</span>
                         <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-purple-600 rounded mr-1"></span> Break-in</span>
-                        <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-blue-600 rounded mr-1"></span> BOCK Device</span>
                     </div>
                 </div>
             </div>
             {% endif %}
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
-            <!-- RAW DATA MONITOR -->
-            <div class="card lg:col-span-2">
-                <!-- ... rest of raw data monitor content ... -->
-            </div>
-
-            <!-- QUICK ACTIONS -->
-            <div class="card">
-                <!-- ... rest of quick actions content ... -->
-            </div>
-        </div>
-
         <!-- SYSTEM LOGS -->
         <div class="card mt-6">
-            <!-- ... rest of system logs content ... -->
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800">
+                        <i class="fas fa-terminal mr-2 text-gray-600"></i>
+                        System Logs
+                    </h2>
+                    <div class="text-sm text-gray-600 mt-1">All system activities and device communications</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="refreshLogs()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
+                        <i class="fas fa-redo mr-1"></i> Refresh
+                    </button>
+                    <button onclick="exportLogs()" class="text-sm text-green-600 hover:text-green-800 flex items-center">
+                        <i class="fas fa-download mr-1"></i> Export
+                    </button>
+                    <button onclick="clearLogs()" class="text-sm text-red-600 hover:text-red-800 flex items-center">
+                        <i class="fas fa-trash mr-1"></i> Clear
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-gray-900 text-gray-300 font-mono text-sm rounded-lg p-4 max-h-64 overflow-y-auto" id="logPanel">
+                {% for log in logs %}
+                <div class="mb-1 border-b border-gray-800 pb-1 flex">
+                    <span class="log-timestamp">{{ log.split(']')[0] }}]</span>
+                    <span class="log-message flex-1">{{ log.split(']')[1] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <div class="mt-4 text-xs text-gray-500">
+                <p>Listening on: <span class="font-mono text-blue-400">{{ server_url }}</span></p>
+                <p class="mt-1">Endpoint: <span class="font-mono">/iclock/cdata.aspx</span> • Commands: <span class="font-mono">GET ATTLOG ALL</span></p>
+            </div>
         </div>
 
         <!-- Footer -->
@@ -447,102 +575,439 @@
         </footer>
     </div>
 
-    <!-- Status Override Modal -->
-    <div id="statusOverrideModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-lg w-full max-w-md">
-            <div class="p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4">Override Attendance Status</h3>
-                <p class="text-gray-600 mb-4" id="overrideRecordInfo"></p>
-                
-                <div class="space-y-3 mb-6">
-                    <label class="flex items-center p-3 border rounded hover:bg-gray-50 cursor-pointer">
-                        <input type="radio" name="overrideStatus" value="1" class="mr-3" checked>
-                        <span class="text-red-600 font-medium">Check-out</span>
-                    </label>
-                    <label class="flex items-center p-3 border rounded hover:bg-gray-50 cursor-pointer">
-                        <input type="radio" name="overrideStatus" value="0" class="mr-3">
-                        <span class="text-green-600 font-medium">Check-in</span>
-                    </label>
-                    <label class="flex items-center p-3 border rounded hover:bg-gray-50 cursor-pointer">
-                        <input type="radio" name="overrideStatus" value="2" class="mr-3">
-                        <span class="text-yellow-600 font-medium">Break-out</span>
-                    </label>
-                    <label class="flex items-center p-3 border rounded hover:bg-gray-50 cursor-pointer">
-                        <input type="radio" name="overrideStatus" value="3" class="mr-3">
-                        <span class="text-purple-600 font-medium">Break-in</span>
-                    </label>
-                </div>
-                
-                <div class="flex justify-end gap-3">
-                    <button onclick="closeStatusModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">
-                        Cancel
+    <!-- Raw Data Modal -->
+    <div id="rawDataModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-white" id="modalTitle">Raw Data</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 overflow-auto flex-1">
+                <div class="raw-data-container" id="modalRawData"></div>
+            </div>
+            <div class="p-4 border-t border-gray-700 flex justify-between">
+                <div class="text-sm text-gray-400" id="modalStats"></div>
+                <div class="flex gap-2">
+                    <button onclick="copyRawData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
+                        <i class="fas fa-copy mr-2"></i>Copy to Clipboard
                     </button>
-                    <button onclick="saveStatusOverride()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-                        Save Changes
+                    <button onclick="closeModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm">
+                        Close
                     </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ... existing raw data modal ... -->
-
     <script>
-        // Add new JavaScript functions for status override
-        let currentRecordId = null;
+        // Global variables
+        let currentDataView = 'hex';
+        let currentDeviceFilter = 'all';
+        let dataRateHistory = [];
 
-        // Apply status override to device
-        function applyStatusOverride(deviceSn) {
-            const statusRadio = document.querySelector(`input[name="status_${deviceSn}"]:checked`);
-            if (!statusRadio) {
-                showNotification('Please select a status', 'warning');
+        // Set data view mode
+        function setDataView(mode) {
+            currentDataView = mode;
+            
+            // Update tab buttons
+            document.getElementById('hexTab').classList.toggle('active', mode === 'hex');
+            document.getElementById('asciiTab').classList.toggle('active', mode === 'ascii');
+            document.getElementById('rawTab').classList.toggle('active', mode === 'raw');
+            
+            // Refresh data display
+            refreshRawData();
+        }
+
+        // Send command to specific device
+        async function sendDeviceCommand(deviceSn, command) {
+            try {
+                showNotification(`Sending command to ${deviceSn}...`, 'info');
+                
+                const response = await fetch(`/api/device/${deviceSn}/command`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    },
+                    body: `command=${encodeURIComponent(command)}`
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                showNotification(`Command sent to ${deviceSn}: ${result.command}`, 'success');
+                
+                // Refresh data after a short delay
+                setTimeout(() => {
+                    refreshRawData();
+                    refreshAttendance();
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error sending command:', error);
+                showNotification(`Error sending command: ${error.message}`, 'error');
+            }
+        }
+
+        // Send command to all devices
+        async function sendCommandToAll(command) {
+            if (!confirm(`Send "${command}" to ALL devices?`)) return;
+            
+            try {
+                showNotification(`Broadcasting command to all devices...`, 'info');
+                
+                const response = await fetch('/api/command/broadcast', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    },
+                    body: `command=${encodeURIComponent(command)}`
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                showNotification(`Command broadcasted to ${result.devices_count} devices`, 'success');
+                
+                // Refresh data after a short delay
+                setTimeout(() => {
+                    refreshRawData();
+                    refreshAttendance();
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Error broadcasting command:', error);
+                showNotification(`Error broadcasting command: ${error.message}`, 'error');
+            }
+        }
+
+        // Send manual command
+        async function sendManualCommand() {
+            const command = document.getElementById('manualCommand').value.trim();
+            if (!command) {
+                showNotification('Please enter a command', 'warning');
                 return;
             }
             
-            const status = statusRadio.value;
-            const statusText = statusRadio.parentElement.querySelector('span').textContent;
-            
-            showNotification(`Setting ${deviceSn} default status to ${statusText}`, 'info');
-            
-            // Save to localStorage for this session
-            localStorage.setItem(`device_${deviceSn}_override`, status);
-            
-            // Refresh attendance table
-            setTimeout(refreshAttendance, 500);
+            try {
+                showNotification(`Sending command: ${command}`, 'info');
+                
+                const response = await fetch('/api/command/send', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    },
+                    body: `command=${encodeURIComponent(command)}`
+                });
+                
+                if (!response.ok) {
+                    // Try broadcast instead
+                    const broadcastResponse = await fetch('/api/command/broadcast', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: `command=${encodeURIComponent(command)}`
+                    });
+                    
+                    if (!broadcastResponse.ok) {
+                        throw new Error('Failed to send command');
+                    }
+                    
+                    const result = await broadcastResponse.json();
+                    showNotification(`Command broadcasted to ${result.devices_count} devices`, 'success');
+                } else {
+                    const result = await response.json();
+                    showNotification(`Command queued: ${result.command}`, 'success');
+                }
+                
+                document.getElementById('manualCommand').value = '';
+                
+                // Refresh data after a short delay
+                setTimeout(() => {
+                    refreshRawData();
+                    refreshAttendance();
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error sending command:', error);
+                showNotification(`Error sending command: ${error.message}`, 'error');
+            }
         }
 
-        // Open status override modal for individual record
-        function overrideRecordStatus(recordId) {
-            currentRecordId = recordId;
-            
-            // In a real implementation, you would fetch record details here
-            document.getElementById('overrideRecordInfo').textContent = 
-                `Override attendance status for record #${recordId}`;
-            
-            document.getElementById('statusOverrideModal').classList.remove('hidden');
+        // View device details
+        async function viewDeviceDetails(deviceSn) {
+            try {
+                const response = await fetch(`/api/device/${deviceSn}`);
+                if (!response.ok) {
+                    throw new Error(`Device not found: ${deviceSn}`);
+                }
+                
+                const device = await response.json();
+                
+                const modal = document.getElementById('rawDataModal');
+                const modalTitle = document.getElementById('modalTitle');
+                const modalData = document.getElementById('modalRawData');
+                const modalStats = document.getElementById('modalStats');
+                
+                let details = `=== DEVICE DETAILS ===\n\n`;
+                details += `Serial Number: ${device.sn}\n`;
+                details += `Device Name: ${device.device_name}\n`;
+                details += `Status: ${device.last_seen_seconds < 300 ? '✅ Online' : '❌ Offline'}\n`;
+                details += `Last Seen: ${device.last_seen}\n`;
+                details += `First Seen: ${device.first_seen}\n`;
+                details += `IP Address: ${device.ip_address}\n`;
+                details += `Records Count: ${device.records_count}\n`;
+                details += `Communications: ${device.comms_count}\n`;
+                details += `\n=== DEVICE PARAMETERS ===\n\n`;
+                
+                for (const [key, value] of Object.entries(device.params || {})) {
+                    details += `${key}: ${value}\n`;
+                }
+                
+                if (Object.keys(device.params || {}).length === 0) {
+                    details += `No parameters available\n`;
+                }
+                
+                modalTitle.textContent = `Device Details: ${device.sn}`;
+                modalData.textContent = details;
+                modalStats.textContent = `${device.sn} • ${device.records_count} records • ${device.comms_count} communications`;
+                modal.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading device details:', error);
+                showNotification(`Error loading device details: ${error.message}`, 'error');
+            }
         }
 
-        // Save status override for individual record
-        function saveStatusOverride() {
-            const status = document.querySelector('input[name="overrideStatus"]:checked').value;
-            
-            // In a real implementation, you would send this to your backend
-            console.log(`Overriding record ${currentRecordId} to status ${status}`);
-            
-            showNotification('Status override saved for this record', 'success');
-            closeStatusModal();
-            
-            // Refresh attendance table
-            setTimeout(refreshAttendance, 500);
+        // View device raw data
+        async function viewDeviceRawData(deviceSn) {
+            try {
+                const response = await fetch(`/api/device/${deviceSn}/raw-data`);
+                if (!response.ok) {
+                    throw new Error(`No data found for device: ${deviceSn}`);
+                }
+                
+                const data = await response.json();
+                
+                const modal = document.getElementById('rawDataModal');
+                const modalTitle = document.getElementById('modalTitle');
+                const modalData = document.getElementById('modalRawData');
+                const modalStats = document.getElementById('modalStats');
+                
+                modalTitle.textContent = `Raw Data: ${deviceSn}`;
+                modalData.textContent = formatRawData(data.raw_data, 'raw');
+                modalStats.textContent = `${deviceSn} • ${data.count} communications • ${data.total_bytes} bytes`;
+                modal.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading raw data:', error);
+                showNotification(`Error loading raw data: ${error.message}`, 'error');
+            }
         }
 
-        // Close status modal
-        function closeStatusModal() {
-            document.getElementById('statusOverrideModal').classList.add('hidden');
-            currentRecordId = null;
+        // View record raw data
+        async function viewRecordRawData(dataHash) {
+            try {
+                const response = await fetch(`/api/raw-data/${dataHash}`);
+                if (!response.ok) {
+                    throw new Error(`Raw data not found`);
+                }
+                
+                const data = await response.json();
+                
+                const modal = document.getElementById('rawDataModal');
+                const modalTitle = document.getElementById('modalTitle');
+                const modalData = document.getElementById('modalRawData');
+                const modalStats = document.getElementById('modalStats');
+                
+                modalTitle.textContent = 'Record Raw Data';
+                modalData.textContent = data.raw_data;
+                modalStats.textContent = `Hash: ${data.hash} • ${data.length} bytes • ${new Date(data.timestamp).toLocaleString()}`;
+                modal.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading raw data:', error);
+                showNotification(`Error loading raw data: ${error.message}`, 'error');
+            }
         }
 
-        // Modify the refreshAttendance function to apply overrides
+        // Close modal
+        function closeModal() {
+            document.getElementById('rawDataModal').classList.add('hidden');
+        }
+
+        // Copy raw data to clipboard
+        async function copyRawData() {
+            const data = document.getElementById('modalRawData').textContent;
+            try {
+                await navigator.clipboard.writeText(data);
+                showNotification('Raw data copied to clipboard', 'success');
+            } catch (error) {
+                console.error('Failed to copy to clipboard:', error);
+                showNotification('Failed to copy to clipboard', 'error');
+            }
+        }
+
+        // Refresh raw data display
+        async function refreshRawData() {
+            try {
+                const response = await fetch('/api/raw-data/recent?limit=30');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                const container = document.getElementById('rawDataContainer');
+                const stats = document.getElementById('dataStats');
+                
+                if (!data || data.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-gray-500 text-center py-8">
+                            <i class="fas fa-database text-3xl mb-3"></i>
+                            <p>No raw data received yet</p>
+                            <p class="text-sm mt-1">Waiting for device communications...</p>
+                        </div>
+                    `;
+                    stats.textContent = '0 bytes, 0 lines';
+                    return;
+                }
+                
+                let html = '';
+                let totalBytes = 0;
+                
+                data.forEach(item => {
+                    totalBytes += item.length;
+                    html += `
+                        <div class="data-line">
+                            <div class="text-xs text-gray-500 mb-1">
+                                [${item.timestamp}] ${item.device_sn} (${item.length} bytes) ${item.direction || ''}
+                            </div>
+                            <div class="${currentDataView}-view">
+                                ${formatRawData(item.raw_data, currentDataView)}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+                stats.textContent = `${totalBytes} bytes, ${data.length} lines`;
+                
+                // Auto-scroll to bottom
+                container.scrollTop = container.scrollHeight;
+                
+            } catch (error) {
+                console.error('Error refreshing raw data:', error);
+            }
+        }
+
+        // Format raw data for display
+        function formatRawData(data, mode) {
+            if (!data) return '';
+            
+            switch(mode) {
+                case 'hex':
+                    // Show hex with line breaks every 32 bytes
+                    let hex = '';
+                    for (let i = 0; i < data.length; i += 32) {
+                        const chunk = data.slice(i, i + 32);
+                        hex += chunk.split('').map(c => 
+                            c.charCodeAt(0).toString(16).padStart(2, '0')
+                        ).join(' ') + '\n';
+                    }
+                    return hex;
+                    
+                case 'ascii':
+                    // Show ASCII with control characters as dots
+                    return data.replace(/[^\x20-\x7E\r\n\t]/g, '.');
+                    
+                case 'raw':
+                default:
+                    return data;
+            }
+        }
+
+        // Clear raw data
+        async function clearRawData() {
+            if (!confirm('Clear raw data display? This does not delete stored data.')) return;
+            
+            document.getElementById('rawDataContainer').innerHTML = `
+                <div class="text-gray-500 text-center py-8">
+                    <i class="fas fa-database text-3xl mb-3"></i>
+                    <p>Raw data cleared</p>
+                    <p class="text-sm mt-1">Waiting for new device communications...</p>
+                </div>
+            `;
+            document.getElementById('dataStats').textContent = '0 bytes, 0 lines';
+        }
+
+        // Rescan devices
+        async function rescanDevices() {
+            try {
+                showNotification('Rescanning devices...', 'info');
+                
+                const response = await fetch('/api/devices/rescan', { 
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(`Rescanned devices: ${result.devices_count} found`, 'success');
+                
+                // Reload page after 1 second
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error rescanning devices:', error);
+                showNotification(`Error rescanning devices: ${error.message}`, 'error');
+            }
+        }
+
+        // Fetch all devices data
+        async function fetchAllDevices() {
+            if (!confirm('Fetch ALL data from all devices? This will get ALL attendance logs and may take some time.')) return;
+            
+            try {
+                showNotification('Fetching ALL data from all devices...', 'info');
+                
+                const response = await fetch('/api/fetch/all', { 
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(`Fetch initiated for ${result.devices_count} devices. Getting ALL attendance logs...`, 'success');
+                
+                // Refresh data after a delay
+                setTimeout(() => {
+                    refreshAttendance();
+                    refreshRawData();
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Error fetching devices:', error);
+                showNotification(`Error fetching devices: ${error.message}`, 'error');
+            }
+        }
+
+        // Refresh attendance
         async function refreshAttendance() {
             try {
                 showNotification('Refreshing attendance records...', 'info');
@@ -554,27 +1019,9 @@
                 
                 const data = await response.json();
                 
-                // Apply device-specific overrides
-                const processedData = data.map(record => {
-                    // Check if this is a BOCK device
-                    if (record.device_sn && record.device_sn.includes('BOCK194560212')) {
-                        // Get override status from localStorage
-                        const overrideStatus = localStorage.getItem(`device_${record.device_sn}_override`);
-                        if (overrideStatus) {
-                            return {
-                                ...record,
-                                override_status: overrideStatus
-                            };
-                        }
-                    }
-                    return record;
-                });
-                
-                // Rest of the function remains the same...
-                // Update the table with processedData instead of data
                 const table = document.getElementById('attendanceTable');
                 
-                if (!processedData || processedData.length === 0) {
+                if (!data || data.length === 0) {
                     table.innerHTML = `
                         <tr>
                             <td colspan="8" class="px-6 py-12 text-center text-gray-500">
@@ -591,63 +1038,39 @@
                 }
                 
                 let html = '';
-                processedData.forEach(record => {
-                    const is_bock_device = record.device_sn && record.device_sn.includes('BOCK194560212');
-                    
-                    // ... rest of the table generation code using record.override_status where needed
+                data.forEach(record => {
                     let statusBadge = '';
-                    if (is_bock_device && record.override_status) {
-                        if (record.override_status === '0') {
-                            statusBadge = '<span class="status-badge status-checkin">Check-in</span>';
-                        } else if (record.override_status === '1') {
-                            statusBadge = '<span class="status-badge status-checkout">Check-out</span>';
-                        } else if (record.override_status === '2') {
-                            statusBadge = '<span class="status-badge status-breakout">Break-out</span>';
-                        } else if (record.override_status === '3') {
-                            statusBadge = '<span class="status-badge status-breakin">Break-in</span>';
-                        }
-                    } else if (is_bock_device) {
-                        // Default check-out for BOCK device
+                    if (record.status === '0') {
+                        statusBadge = '<span class="status-badge status-checkin">Check-in</span>';
+                    } else if (record.status === '1') {
                         statusBadge = '<span class="status-badge status-checkout">Check-out</span>';
+                    } else if (record.status === '2') {
+                        statusBadge = '<span class="status-badge status-breakout">Break-out</span>';
+                    } else if (record.status === '3') {
+                        statusBadge = '<span class="status-badge status-breakin">Break-in</span>';
                     } else {
-                        // Normal status for other devices
-                        if (record.status === '0') {
-                            statusBadge = '<span class="status-badge status-checkin">Check-in</span>';
-                        } else if (record.status === '1') {
-                            statusBadge = '<span class="status-badge status-checkout">Check-out</span>';
-                        } else if (record.status === '2') {
-                            statusBadge = '<span class="status-badge status-breakout">Break-out</span>';
-                        } else if (record.status === '3') {
-                            statusBadge = '<span class="status-badge status-breakin">Break-in</span>';
-                        } else {
-                            statusBadge = `<span class="status-badge status-other">${record.status_text || 'Unknown'}</span>`;
-                        }
+                        statusBadge = `<span class="status-badge status-other">${record.status_text || 'Unknown'}</span>`;
                     }
                     
                     html += `
-                        <tr class="hover:bg-gray-50 ${record.status === '1' ? 'bg-red-50' : record.status === '0' ? 'bg-green-50' : is_bock_device ? 'bg-blue-50' : ''}">
+                        <tr class="hover:bg-gray-50 ${record.status === '1' ? 'bg-red-50' : record.status === '0' ? 'bg-green-50' : ''}">
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="flex items-center">
                                     <div class="flex-shrink-0 h-8 w-8 rounded-full 
                                         ${record.status === '1' ? 'bg-red-100' : 
                                           record.status === '0' ? 'bg-green-100' : 
-                                          is_bock_device ? 'bg-blue-100' : 
-                                          'bg-gray-100'} 
+                                          'bg-blue-100'} 
                                         flex items-center justify-center">
                                         <span class="text-xs font-bold 
                                             ${record.status === '1' ? 'text-red-600' : 
                                               record.status === '0' ? 'text-green-600' : 
-                                              is_bock_device ? 'text-blue-600' : 
-                                              'text-gray-600'}">
+                                              'text-blue-600'}">
                                             ${record.device_sn ? record.device_sn.slice(-4) : 'N/A'}
                                         </span>
                                     </div>
                                     <div class="ml-3">
                                         <div class="text-sm font-medium text-gray-900">
-                                            ${is_bock_device ? 
-                                                `<span class="text-blue-600 font-bold">${record.device_name || 'BOCK Device'}</span>
-                                                 <span class="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">BOCK</span>` : 
-                                                (record.device_name || 'Unknown Device')}
+                                            ${record.device_name || 'Unknown Device'}
                                         </div>
                                         <div class="text-xs text-gray-500">${record.device_sn || 'N/A'}</div>
                                     </div>
@@ -672,22 +1095,16 @@
                                 ${record.workcode || ''}
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex gap-2">
-                                    <button onclick="viewRecordRawData('${record.raw_data_hash || ''}')" class="text-blue-600 hover:text-blue-900 text-sm">
-                                        <i class="fas fa-eye mr-1"></i>View
-                                    </button>
-                                    ${is_bock_device ? 
-                                        `<button onclick="overrideRecordStatus('${record.id || ''}')" class="text-green-600 hover:text-green-900 text-sm">
-                                            <i class="fas fa-edit mr-1"></i>Edit Status
-                                        </button>` : ''}
-                                </div>
+                                <button onclick="viewRecordRawData('${record.raw_data_hash || ''}')" class="text-blue-600 hover:text-blue-900 text-sm">
+                                    <i class="fas fa-eye mr-1"></i>View
+                                </button>
                             </td>
                         </tr>
                     `;
                 });
                 
                 table.innerHTML = html;
-                showNotification(`Attendance refreshed: ${processedData.length} records`, 'success');
+                showNotification(`Attendance refreshed: ${data.length} records`, 'success');
                 
             } catch (error) {
                 console.error('Error refreshing attendance:', error);
@@ -695,35 +1112,206 @@
             }
         }
 
-        // Initialize on page load
-        document.addEventListener('DOMContentLoaded', function() {
-            // Set default status for BOCK194560212 devices
-            const bockDevices = document.querySelectorAll('[name^="status_BOCK194560212"]');
-            bockDevices.forEach(radio => {
-                if (radio.value === '1') {
-                    radio.checked = true;
+        // Export attendance to CSV
+        async function exportAttendance() {
+            try {
+                const response = await fetch('/api/export/csv');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
-            });
-            
-            // Load saved overrides from localStorage
-            const savedOverride = localStorage.getItem('device_BOCK194560212_override');
-            if (savedOverride) {
-                const radio = document.querySelector(`input[name="status_BOCK194560212"][value="${savedOverride}"]`);
-                if (radio) {
-                    radio.checked = true;
-                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `attendance_export_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('Attendance data exported to CSV', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting attendance:', error);
+                showNotification(`Error exporting attendance: ${error.message}`, 'error');
             }
+        }
+
+        // Refresh logs
+        async function refreshLogs() {
+            try {
+                const response = await fetch('/api/logs/recent?limit=150');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const logs = await response.json();
+                
+                const logPanel = document.getElementById('logPanel');
+                let html = '';
+                
+                logs.forEach(log => {
+                    const parts = log.split(']');
+                    if (parts.length >= 2) {
+                        html += `
+                            <div class="mb-1 border-b border-gray-800 pb-1 flex">
+                                <span class="log-timestamp">${parts[0]}]</span>
+                                <span class="log-message flex-1">${parts.slice(1).join(']')}</span>
+                            </div>
+                        `;
+                    } else {
+                        html += `<div class="mb-1 border-b border-gray-800 pb-1">${log}</div>`;
+                    }
+                });
+                
+                logPanel.innerHTML = html;
+                logPanel.scrollTop = logPanel.scrollHeight;
+                
+            } catch (error) {
+                console.error('Error refreshing logs:', error);
+            }
+        }
+
+        // Export logs
+        async function exportLogs() {
+            try {
+                const response = await fetch('/api/logs/export');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `essl_logs_${new Date().toISOString().split('T')[0]}.txt`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('Logs exported', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting logs:', error);
+                showNotification(`Error exporting logs: ${error.message}`, 'error');
+            }
+        }
+
+        // Clear logs
+        async function clearLogs() {
+            if (!confirm('Clear all system logs? This action cannot be undone.')) return;
+            
+            try {
+                const response = await fetch('/api/logs/clear', { 
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(result.message || 'Logs cleared', 'success');
+                setTimeout(refreshLogs, 1000);
+                
+            } catch (error) {
+                console.error('Error clearing logs:', error);
+                showNotification(`Error clearing logs: ${error.message}`, 'error');
+            }
+        }
+
+        // Show notification
+        function showNotification(message, type = 'info') {
+            // Remove existing notifications
+            document.querySelectorAll('.notification').forEach(el => el.remove());
+            
+            const notification = document.createElement('div');
+            notification.className = `notification fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-300 ${
+                type === 'success' ? 'bg-green-500 text-white' :
+                type === 'error' ? 'bg-red-500 text-white' :
+                type === 'warning' ? 'bg-yellow-500 text-white' :
+                'bg-blue-500 text-white'
+            }`;
+            notification.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : 
+                                       type === 'error' ? 'exclamation-circle' : 
+                                       type === 'warning' ? 'exclamation-triangle' : 'info-circle'} mr-3"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100px)';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+
+        // Update last update time
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { 
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            document.getElementById('lastUpdateTime').textContent = 
+                `${now.toLocaleDateString()} ${timeString}`;
+        }
+
+        // Auto-refresh functions
+        setInterval(refreshRawData, 10000);  // Refresh raw data every 10 seconds
+        setInterval(refreshLogs, 10000);     // Refresh logs every 10 seconds
+        setInterval(updateLastUpdateTime, 60000);  // Update time every minute
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateLastUpdateTime();
+            
+            // Auto-scroll logs to bottom
+            const logPanel = document.getElementById('logPanel');
+            if (logPanel) {
+                logPanel.scrollTop = logPanel.scrollHeight;
+            }
+            
+            // Auto-scroll raw data to bottom
+            const rawDataContainer = document.getElementById('rawDataContainer');
+            if (rawDataContainer) {
+                rawDataContainer.scrollTop = rawDataContainer.scrollHeight;
+            }
+            
+            // Set default command to GET ATTLOG ALL
+            document.getElementById('manualCommand').value = 'GET ATTLOG ALL';
             
             // Add keyboard shortcuts
             document.addEventListener('keydown', function(e) {
-                // Esc to close modals
+                // Ctrl+R to refresh attendance
+                if (e.ctrlKey && e.key === 'r') {
+                    e.preventDefault();
+                    refreshAttendance();
+                }
+                // Ctrl+F to fetch all data
+                if (e.ctrlKey && e.key === 'f') {
+                    e.preventDefault();
+                    fetchAllDevices();
+                }
+                // Esc to close modal
                 if (e.key === 'Escape') {
                     closeModal();
-                    closeStatusModal();
                 }
             });
-            
-            // Rest of initialization...
         });
     </script>
 </body>
