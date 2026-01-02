@@ -256,8 +256,6 @@ def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, An
     
     # Clean device SN
     display_sn = device_sn
-    if device_sn.startswith('B') and len(device_sn) > 12:
-        display_sn = device_sn[1:]
     
     record = {
         'user_id': parts[0],
