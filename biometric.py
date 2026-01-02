@@ -207,7 +207,7 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
     
     save_persistent_data()
 
-def parse_attendance_line(line: str) -> Dict[str, Any]:
+def parse_attendance_line(line: str, device_sn: str = "") -> Dict[str, Any]:
     """
     Parse attendance line in format:
     USER_ID\tTIMESTAMP\tSTATUS\tVERIFICATION\tWORKCODE
@@ -216,6 +216,13 @@ def parse_attendance_line(line: str) -> Dict[str, Any]:
     if len(parts) < 3:
         return {}
     
+    # Find device name for this SN
+    device_name = f"Device {device_sn[-4:]}" if len(device_sn) > 4 else device_sn
+    for device in DEVICES:
+        if device.get('sn') == device_sn:
+            device_name = device.get('device_name', device_name)
+            break
+    
     record = {
         'user_id': parts[0],
         'timestamp': parts[1],
@@ -223,30 +230,11 @@ def parse_attendance_line(line: str) -> Dict[str, Any]:
         'verification': parts[3] if len(parts) > 3 else '',
         'workcode': parts[4] if len(parts) > 4 else '',
         'received_at': datetime.utcnow().isoformat(),
-        'raw': line
+        'raw': line,
+        'device_sn': device_sn,
+        'device_name': device_name
     }
-    
-    # Map status codes to human readable
-    status_map = {
-        '0': 'Check-in',
-        '1': 'Check-out',
-        '2': 'Break-out',
-        '3': 'Break-in',
-        '4': 'Overtime-in',
-        '5': 'Overtime-out',
-        '255': 'Error'
-    }
-    record['status_text'] = status_map.get(record['status'], 'Unknown')
-    
-    # Parse date and time for display
-    try:
-        dt = datetime.strptime(record['timestamp'], "%Y-%m-%d %H:%M:%S")
-        record['display_date'] = dt.strftime("%Y-%m-%d")
-        record['display_time'] = dt.strftime("%H:%M:%S")
-    except:
-        record['display_date'] = record['timestamp'].split()[0] if ' ' in record['timestamp'] else record['timestamp']
-        record['display_time'] = record['timestamp'].split()[1] if ' ' in record['timestamp'] else ''
-    
+     
     return record
 
 async def log_request(request: Request, body: str):
