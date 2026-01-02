@@ -790,3 +790,6 @@ def last_filter(s, n=4):
     return s[-n:] if s else ""
 
 templates.env.filters["last"] = last_filter
+
+
+
