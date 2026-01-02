@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Request, Form, Depends
+from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from datetime import datetime, timedelta
@@ -32,6 +32,7 @@ DATA_FILE = "attendance_data.json"
 LOG_FILE = "device_logs.txt"
 RAW_DATA_FILE = "raw_data.json"
 DEVICES_FILE = "devices.json"
+RECORD_RAW_FILE = "record_raw_data.json"  # New file for individual record raw data
 
 # Track device connection
 IS_FETCHING_ALL_LOGS = False
@@ -80,6 +81,20 @@ def load_persistent_data():
                 print(f"📂 Loaded {len(DEVICES)} devices")
     except Exception as e:
         print(f"⚠️ Error loading devices: {e}")
+    
+    # Load record raw data if exists
+    if os.path.exists(RECORD_RAW_FILE):
+        try:
+            with open(RECORD_RAW_FILE, 'r') as f:
+                record_raw_data = json.load(f)
+                # Merge with existing attendance data
+                for record in ATTENDANCE_DATA:
+                    record_hash = record.get('raw_data_hash')
+                    if record_hash and record_hash in record_raw_data:
+                        record['raw_data'] = record_raw_data[record_hash]
+                print(f"📂 Loaded record raw data for {len(record_raw_data)} records")
+        except Exception as e:
+            print(f"⚠️ Error loading record raw data: {e}")
 
 def save_persistent_data():
     """Save current data to files"""
@@ -116,6 +131,19 @@ def save_persistent_data():
             json.dump(DEVICES, f, indent=2)
     except Exception as e:
         print(f"⚠️ Error saving devices: {e}")
+    
+    # Save record raw data
+    try:
+        record_raw_data = {}
+        for record in ATTENDANCE_DATA:
+            record_hash = record.get('raw_data_hash')
+            if record_hash and 'raw_data' in record:
+                record_raw_data[record_hash] = record.get('raw_data', '')
+        
+        with open(RECORD_RAW_FILE, 'w') as f:
+            json.dump(record_raw_data, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Error saving record raw data: {e}")
 
 def log(msg: str):
     """Add a log entry with timestamp"""
@@ -128,12 +156,18 @@ def log(msg: str):
 
 def store_raw_data(device_sn: str, raw_data: str, direction: str = "incoming"):
     """Store raw data for display"""
+    # Clean device SN for storage
+    cleaned_sn = device_sn
+    if device_sn.startswith('B') and len(device_sn) > 12:
+        cleaned_sn = device_sn[1:]
+    
     data_hash = hashlib.md5(raw_data.encode()).hexdigest()
     
     raw_entry = {
         'id': data_hash,
         'timestamp': datetime.utcnow().isoformat(),
-        'device_sn': device_sn,
+        'device_sn': cleaned_sn,  # Store cleaned SN
+        'original_sn': device_sn,  # Store original SN
         'raw_data': raw_data,
         'length': len(raw_data),
         'direction': direction,
@@ -150,17 +184,19 @@ def store_raw_data(device_sn: str, raw_data: str, direction: str = "incoming"):
     return data_hash
 
 def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = None):
-    """Update or create device information"""
+    """Update or create device information with proper SN handling"""
     global DEVICES
     
-    # Clean up SN - remove any B prefix if present
+    # Clean up SN - remove any B prefix if present, but keep track
+    original_sn = sn
+    display_sn = sn
     if sn.startswith('B') and len(sn) > 12:
-        sn = sn[1:]  # Remove the B prefix
+        display_sn = sn[1:]  # Remove the B prefix for display
     
-    # Find existing device
+    # Find existing device by both original and display SN
     device_index = -1
     for i, device in enumerate(DEVICES):
-        if device.get('sn') == sn:
+        if device.get('sn') == display_sn or device.get('original_sn') == sn:
             device_index = i
             break
     
@@ -172,18 +208,23 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
         DEVICES[device_index]['last_seen_seconds'] = 0
         DEVICES[device_index]['comms_count'] = DEVICES[device_index].get('comms_count', 0) + 1
         
+        # Update original SN if different
+        if 'original_sn' not in DEVICES[device_index]:
+            DEVICES[device_index]['original_sn'] = original_sn
+        
         if ip_address:
             DEVICES[device_index]['ip_address'] = ip_address
         
         if data:
             DEVICES[device_index].update(data)
     else:
-        # Create new device with full serial number
+        # Create new device with both original and display SN
         device_data = {
-            'sn': sn,  # Full serial number
+            'sn': display_sn,  # Cleaned SN for display
+            'original_sn': original_sn,  # Original SN as received
             'ip_address': ip_address or 'Unknown',
-            'device_name': f"Device {sn[-8:]}" if len(sn) > 8 else f"Device {sn}",
-            'short_sn': sn[-8:] if len(sn) > 8 else sn,
+            'device_name': f"Device {display_sn[-8:]}" if len(display_sn) > 8 else f"Device {display_sn}",
+            'short_sn': display_sn[-8:] if len(display_sn) > 8 else display_sn,
             'first_seen': now.isoformat(),
             'last_seen': now.isoformat(),
             'last_seen_seconds': 0,
@@ -197,7 +238,7 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
             device_data.update(data)
         
         DEVICES.append(device_data)
-        log(f"📱 New device detected: {sn}")
+        log(f"📱 New device detected: {display_sn} (Original: {original_sn})")
     
     # Update last seen seconds for all devices
     for device in DEVICES:
@@ -215,15 +256,22 @@ def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, An
     if len(parts) < 3:
         return {}
     
+    # Clean device SN
+    display_sn = device_sn
+    if device_sn.startswith('B') and len(device_sn) > 12:
+        display_sn = device_sn[1:]
+    
     record = {
         'user_id': parts[0],
         'timestamp': parts[1],
         'status': parts[2],
         'verification': parts[3] if len(parts) > 3 else '',
         'workcode': parts[4] if len(parts) > 4 else '',
-        'device_sn': device_sn,  # Store full serial number
+        'device_sn': display_sn,  # Store cleaned SN
+        'original_device_sn': device_sn,  # Store original SN
         'received_at': datetime.utcnow().isoformat(),
-        'raw': line
+        'raw': line,
+        'raw_data': line  # Store the actual raw data
     }
     
     # Skip unknown status records (status not 0,1,2,3,4,5)
@@ -234,8 +282,8 @@ def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, An
     # Find device name
     device_name = "Unknown Device"
     for device in DEVICES:
-        if device.get('sn') == device_sn:
-            device_name = device.get('device_name', f"Device {device_sn}")
+        if device.get('sn') == display_sn or device.get('original_sn') == device_sn:
+            device_name = device.get('device_name', f"Device {display_sn}")
             break
     
     record['device_name'] = device_name
@@ -259,14 +307,17 @@ def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, An
         record['display_time'] = dt.strftime("%H:%M:%S")
         record['datetime_obj'] = dt
         record['sort_datetime'] = dt.timestamp()
+        record['iso_timestamp'] = dt.isoformat()
     except:
         record['display_date'] = record['timestamp'].split()[0] if ' ' in record['timestamp'] else record['timestamp']
         record['display_time'] = record['timestamp'].split()[1] if ' ' in record['timestamp'] else ''
         record['datetime_obj'] = None
         record['sort_datetime'] = 0
+        record['iso_timestamp'] = record['timestamp']
     
     # Generate hash for raw data reference
     record['raw_data_hash'] = hashlib.md5(line.encode()).hexdigest()
+    record['record_id'] = f"{record['user_id']}_{record['iso_timestamp']}_{record['status']}_{display_sn}"
     
     return record
 
@@ -363,19 +414,14 @@ async def home(request: Request):
     online_devices = sum(1 for d in DEVICES if d.get('last_seen_seconds', 0) < 300)
     
     # Calculate total data size
-    total_data_size = sum(len(r.get('raw', '')) for r in ATTENDANCE_DATA)
     total_data_bytes = sum(len(r.get('raw', '')) for r in ATTENDANCE_DATA)
+    total_data_size = f"{total_data_bytes / 1024:.1f} KB"
     total_comms = sum(d.get('comms_count', 0) for d in DEVICES)
     
     # Format device data for display
     display_devices = []
     for device in DEVICES:
         display_device = device.copy()
-        
-        # Clean SN for display (remove B prefix if present)
-        sn = display_device.get('sn', '')
-        if sn.startswith('B') and len(sn) > 12:
-            display_device['sn'] = sn[1:]
         
         # Format dates
         try:
@@ -386,6 +432,11 @@ async def home(request: Request):
         except:
             display_device['first_seen'] = device.get('first_seen', 'Unknown')
             display_device['last_seen'] = device.get('last_seen', 'Unknown')
+        
+        # Ensure device name is set
+        if not display_device.get('device_name'):
+            sn = display_device.get('sn', '')
+            display_device['device_name'] = f"Device {sn[-8:]}" if len(sn) > 8 else f"Device {sn}"
         
         display_devices.append(display_device)
     
@@ -398,16 +449,16 @@ async def home(request: Request):
         if not display_record.get('device_sn'):
             display_record['device_sn'] = 'Unknown'
         
-        # Clean device SN for display
-        if display_record['device_sn'].startswith('B') and len(display_record['device_sn']) > 12:
-            display_record['device_sn'] = display_record['device_sn'][1:]
-        
         # Get device name if not already present
         if not display_record.get('device_name') or display_record['device_name'] == 'Unknown Device':
             for device in DEVICES:
                 if device.get('sn') == display_record['device_sn']:
                     display_record['device_name'] = device.get('device_name', f"Device {display_record['device_sn']}")
                     break
+        
+        # Ensure raw data hash exists
+        if not display_record.get('raw_data_hash'):
+            display_record['raw_data_hash'] = hashlib.md5(display_record.get('raw', '').encode()).hexdigest()
         
         recent_attendance.append(display_record)
     
@@ -424,7 +475,7 @@ async def home(request: Request):
             "devices": display_devices,
             "total_records": len(ATTENDANCE_DATA),
             "live_records": len(today_records),
-            "total_data_size": f"{total_data_size / 1024:.1f} KB",
+            "total_data_size": total_data_size,
             "total_data_bytes": total_data_bytes,
             "total_comms": total_comms,
             "online_devices": online_devices,
@@ -453,15 +504,19 @@ async def rescan_devices():
 @app.get("/api/device/{device_sn}")
 async def get_device(device_sn: str):
     """Get specific device details"""
-    # Handle B prefix in search
-    cleaned_sn = device_sn[1:] if device_sn.startswith('B') else device_sn
-    
+    # Try to find device by both original and display SN
     for device in DEVICES:
-        sn = device.get('sn', '')
-        if sn == cleaned_sn or sn == device_sn:
+        if device.get('sn') == device_sn or device.get('original_sn') == device_sn:
             return device
     
-    return JSONResponse({"error": "Device not found"}, status_code=404)
+    # Also try with B prefix removed
+    if device_sn.startswith('B') and len(device_sn) > 12:
+        cleaned_sn = device_sn[1:]
+        for device in DEVICES:
+            if device.get('sn') == cleaned_sn:
+                return device
+    
+    raise HTTPException(status_code=404, detail="Device not found")
 
 @app.post("/api/device/{device_sn}/command")
 async def send_device_command(device_sn: str, command: str = Form(...)):
@@ -493,13 +548,11 @@ async def get_recent_raw_data(limit: int = 30):
 @app.get("/api/device/{device_sn}/raw-data")
 async def get_device_raw_data(device_sn: str):
     """Get raw data for specific device"""
-    # Handle B prefix in search
-    cleaned_sn = device_sn[1:] if device_sn.startswith('B') else device_sn
-    
     device_data = []
     for rd in RAW_DATA_STORE:
         sn = rd.get('device_sn', '')
-        if sn == cleaned_sn or sn == device_sn:
+        original_sn = rd.get('original_sn', '')
+        if sn == device_sn or original_sn == device_sn:
             device_data.append(rd)
     
     total_bytes = sum(rd.get('length', 0) for rd in device_data)
@@ -515,7 +568,7 @@ async def get_raw_data(data_hash: str):
     for rd in RAW_DATA_STORE:
         if rd.get('id') == data_hash:
             return rd
-    return JSONResponse({"error": "Raw data not found"}, status_code=404)
+    raise HTTPException(status_code=404, detail="Raw data not found")
 
 @app.get("/api/attendance/recent")
 async def get_recent_attendance(limit: int = 100):
@@ -525,19 +578,13 @@ async def get_recent_attendance(limit: int = 100):
     
     # Ensure device info is complete
     for record in recent:
-        if not record.get('device_sn'):
-            record['device_sn'] = 'Unknown'
-        
-        # Clean device SN for display
-        if record['device_sn'].startswith('B') and len(record['device_sn']) > 12:
-            record['device_sn'] = record['device_sn'][1:]
-        
         # Find device name
         device_name = "Unknown Device"
         for device in DEVICES:
             sn = device.get('sn', '')
-            if sn == record['device_sn'] or sn == f"B{record['device_sn']}":
-                device_name = device.get('device_name', f"Device {record['device_sn']}")
+            original_sn = device.get('original_sn', '')
+            if sn == record.get('device_sn') or original_sn == record.get('original_device_sn'):
+                device_name = device.get('device_name', f"Device {sn}")
                 break
         
         record['device_name'] = device_name
@@ -547,6 +594,31 @@ async def get_recent_attendance(limit: int = 100):
             record['raw_data_hash'] = hashlib.md5(record.get('raw', '').encode()).hexdigest()
     
     return recent
+
+@app.get("/api/attendance/record/{record_hash}")
+async def get_attendance_record_raw(record_hash: str):
+    """Get raw data for specific attendance record"""
+    # Search in attendance data
+    for record in ATTENDANCE_DATA:
+        if record.get('raw_data_hash') == record_hash:
+            return {
+                "record": record,
+                "raw_data": record.get('raw_data', record.get('raw', '')),
+                "device_sn": record.get('device_sn'),
+                "timestamp": record.get('timestamp')
+            }
+    
+    # Also search in raw data store
+    for rd in RAW_DATA_STORE:
+        if rd.get('id') == record_hash:
+            return {
+                "record": None,
+                "raw_data": rd.get('raw_data', ''),
+                "device_sn": rd.get('device_sn'),
+                "timestamp": rd.get('timestamp')
+            }
+    
+    raise HTTPException(status_code=404, detail="Record raw data not found")
 
 @app.get("/api/export/csv")
 async def export_csv():
@@ -562,11 +634,6 @@ async def export_csv():
     
     # Write data
     for record in sorted_data:
-        # Clean device SN for export
-        device_sn = record.get('device_sn', 'Unknown')
-        if device_sn.startswith('B') and len(device_sn) > 12:
-            device_sn = device_sn[1:]
-        
         writer.writerow([
             record.get('user_id', ''),
             record.get('display_date', ''),
@@ -575,7 +642,7 @@ async def export_csv():
             record.get('status_text', ''),
             record.get('verification', ''),
             record.get('workcode', ''),
-            device_sn,
+            record.get('device_sn', 'Unknown'),
             record.get('device_name', 'Unknown Device'),
             record.get('received_at', '')
         ])
@@ -683,10 +750,9 @@ async def iclock_cdata(request: Request):
                 if len(parts) >= 2:
                     record = parse_attendance_line(line, device_sn)
                     if record:
-                        # Check for duplicate
-                        record_key = f"{record['user_id']}_{record['timestamp']}_{record['status']}_{device_sn}"
+                        # Check for duplicate using record_id
                         existing = any(
-                            f"{r.get('user_id')}_{r.get('timestamp')}_{r.get('status')}_{r.get('device_sn')}" == record_key 
+                            r.get('record_id') == record['record_id']
                             for r in ATTENDANCE_DATA
                         )
                         
@@ -696,7 +762,7 @@ async def iclock_cdata(request: Request):
                             
                             # Update device record count
                             for device in DEVICES:
-                                if device.get('sn') == device_sn:
+                                if device.get('sn') == record['device_sn'] or device.get('original_sn') == device_sn:
                                     device['records_count'] = device.get('records_count', 0) + 1
                                     break
         

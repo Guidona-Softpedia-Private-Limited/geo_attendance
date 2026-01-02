@@ -274,128 +274,6 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- RAW DATA MONITOR -->
-            <div class="card lg:col-span-2">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800">
-                            <i class="fas fa-code mr-2 text-green-600"></i>
-                            Raw Data Monitor
-                        </h2>
-                        <div class="text-sm text-gray-600 mt-1">Complete raw body from device communications</div>
-                    </div>
-                    <div class="flex gap-2">
-                        <div class="flex bg-gray-100 rounded-lg p-1">
-                            <button onclick="setDataView('hex')" id="hexTab" class="tab-button active">Hex</button>
-                            <button onclick="setDataView('ascii')" id="asciiTab" class="tab-button">ASCII</button>
-                            <button onclick="setDataView('raw')" id="rawTab" class="tab-button">Raw</button>
-                        </div>
-                        <button onclick="clearRawData()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
-                            <i class="fas fa-trash mr-2"></i>Clear
-                        </button>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm text-gray-600 mb-2">
-                        <span id="currentDevice">All Devices</span>
-                        <span id="dataStats">0 bytes, 0 lines</span>
-                    </div>
-                    <div class="raw-data-container" id="rawDataContainer">
-                        {% if recent_raw_data %}
-                            {% for data in recent_raw_data %}
-                            <div class="data-line">
-                                <div class="text-xs text-gray-500 mb-1">
-                                    [{{ data.timestamp }}] <span class="device-serial">{{ data.device_sn }}</span> ({{ data.length }} bytes)
-                                </div>
-                                <div class="hex-view">
-                                    {{ data.hex_preview }}
-                                </div>
-                                <div class="ascii-view mt-1">
-                                    {{ data.ascii_preview }}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-gray-500 text-center py-8">
-                                <i class="fas fa-database text-3xl mb-3"></i>
-                                <p>No raw data received yet</p>
-                                <p class="text-sm mt-1">Waiting for device communications...</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-4 gap-4 text-center">
-                    <div class="bg-blue-50 p-3 rounded">
-                        <div class="text-lg font-bold text-blue-600" id="totalBytes">{{ total_data_bytes }}</div>
-                        <div class="text-xs text-blue-500">Total Bytes</div>
-                    </div>
-                    <div class="bg-green-50 p-3 rounded">
-                        <div class="text-lg font-bold text-green-600" id="totalComms">{{ total_comms }}</div>
-                        <div class="text-xs text-green-500">Communications</div>
-                    </div>
-                    <div class="bg-purple-50 p-3 rounded">
-                        <div class="text-lg font-bold text-purple-600" id="lastComms">0</div>
-                        <div class="text-xs text-purple-500">Last 5 min</div>
-                    </div>
-                    <div class="bg-orange-50 p-3 rounded">
-                        <div class="text-lg font-bold text-orange-600" id="dataRate">0/s</div>
-                        <div class="text-xs text-orange-500">Data Rate</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- QUICK ACTIONS -->
-            <div class="card">
-                <h2 class="text-xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>
-                    Quick Actions
-                </h2>
-                
-                <div class="space-y-3">
-                    <button onclick="fetchAllDevices()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Fetch ALL Devices Data</span>
-                        <i class="fas fa-download"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Get ALL Attendance Logs</span>
-                        <i class="fas fa-history"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Get All Device Info</span>
-                        <i class="fas fa-info-circle"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Reboot All Devices</span>
-                        <i class="fas fa-power-off"></i>
-                    </button>
-                    
-                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-                        <h3 class="font-medium text-gray-700 mb-3">Manual Command</h3>
-                        <div class="flex gap-2">
-                            <input type="text" id="manualCommand" placeholder="e.g., GET ATTLOG ALL" 
-                                   class="flex-1 p-2 border border-gray-300 rounded text-sm" value="GET ATTLOG ALL">
-                            <button onclick="sendManualCommand()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                        <div class="mt-2 text-xs text-gray-500">
-                            <p>Common Commands:</p>
-                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
-                            <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
-                            <p class="font-mono text-xs">GET OPTION - Get device settings</p>
-                            <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
-                            <p class="font-mono text-xs">REBOOT - Restart device</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- ATTENDANCE RECORDS -->
         <div class="card mt-6">
@@ -528,6 +406,133 @@
             </div>
             {% endif %}
         </div>
+
+
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- RAW DATA MONITOR -->
+            <div class="card lg:col-span-2">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-code mr-2 text-green-600"></i>
+                            Raw Data Monitor
+                        </h2>
+                        <div class="text-sm text-gray-600 mt-1">Complete raw body from device communications</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button onclick="setDataView('hex')" id="hexTab" class="tab-button active">Hex</button>
+                            <button onclick="setDataView('ascii')" id="asciiTab" class="tab-button">ASCII</button>
+                            <button onclick="setDataView('raw')" id="rawTab" class="tab-button">Raw</button>
+                        </div>
+                        <button onclick="clearRawData()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                            <i class="fas fa-trash mr-2"></i>Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span id="currentDevice">All Devices</span>
+                        <span id="dataStats">0 bytes, 0 lines</span>
+                    </div>
+                    <div class="raw-data-container" id="rawDataContainer">
+                        {% if recent_raw_data %}
+                            {% for data in recent_raw_data %}
+                            <div class="data-line">
+                                <div class="text-xs text-gray-500 mb-1">
+                                    [{{ data.timestamp }}] <span class="device-serial">{{ data.device_sn }}</span> ({{ data.length }} bytes)
+                                </div>
+                                <div class="hex-view">
+                                    {{ data.hex_preview }}
+                                </div>
+                                <div class="ascii-view mt-1">
+                                    {{ data.ascii_preview }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-gray-500 text-center py-8">
+                                <i class="fas fa-database text-3xl mb-3"></i>
+                                <p>No raw data received yet</p>
+                                <p class="text-sm mt-1">Waiting for device communications...</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-4 text-center">
+                    <div class="bg-blue-50 p-3 rounded">
+                        <div class="text-lg font-bold text-blue-600" id="totalBytes">{{ total_data_bytes }}</div>
+                        <div class="text-xs text-blue-500">Total Bytes</div>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded">
+                        <div class="text-lg font-bold text-green-600" id="totalComms">{{ total_comms }}</div>
+                        <div class="text-xs text-green-500">Communications</div>
+                    </div>
+                    <div class="bg-purple-50 p-3 rounded">
+                        <div class="text-lg font-bold text-purple-600" id="lastComms">0</div>
+                        <div class="text-xs text-purple-500">Last 5 min</div>
+                    </div>
+                    <div class="bg-orange-50 p-3 rounded">
+                        <div class="text-lg font-bold text-orange-600" id="dataRate">0/s</div>
+                        <div class="text-xs text-orange-500">Data Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUICK ACTIONS -->
+            <div class="card">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>
+                    Quick Actions
+                </h2>
+                
+                <div class="space-y-3">
+                    <button onclick="fetchAllDevices()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Fetch ALL Devices Data</span>
+                        <i class="fas fa-download"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get ALL Attendance Logs</span>
+                        <i class="fas fa-history"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get All Device Info</span>
+                        <i class="fas fa-info-circle"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Reboot All Devices</span>
+                        <i class="fas fa-power-off"></i>
+                    </button>
+                    
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-gray-700 mb-3">Manual Command</h3>
+                        <div class="flex gap-2">
+                            <input type="text" id="manualCommand" placeholder="e.g., GET ATTLOG ALL" 
+                                   class="flex-1 p-2 border border-gray-300 rounded text-sm" value="GET ATTLOG ALL">
+                            <button onclick="sendManualCommand()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <p>Common Commands:</p>
+                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
+                            <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
+                            <p class="font-mono text-xs">GET OPTION - Get device settings</p>
+                            <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
+                            <p class="font-mono text-xs">REBOOT - Restart device</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+       
 
         <!-- SYSTEM LOGS -->
         <div class="card mt-6">
@@ -760,8 +765,11 @@
                 const modalData = document.getElementById('modalRawData');
                 const modalStats = document.getElementById('modalStats');
                 
-                let details = `=== DEVICE DETAILS ===\n\n`;
-                details += `Serial Number: ${device.sn}\n`;
+                let details = `=== DEVICE INFORMATION ===\n\n`;
+                details += `Display Serial: ${device.sn}\n`;
+                if (device.original_sn) {
+                    details += `Original Serial: ${device.original_sn}\n`;
+                }
                 details += `Device Name: ${device.device_name}\n`;
                 details += `Status: ${device.last_seen_seconds < 300 ? '✅ Online' : '❌ Offline'}\n`;
                 details += `Last Seen: ${device.last_seen}\n`;
@@ -819,9 +827,11 @@
         // View record raw data
         async function viewRecordRawData(dataHash) {
             try {
-                const response = await fetch(`/api/raw-data/${dataHash}`);
+                showNotification('Loading record raw data...', 'info');
+                
+                const response = await fetch(`/api/attendance/record/${dataHash}`);
                 if (!response.ok) {
-                    throw new Error(`Raw data not found`);
+                    throw new Error(`Raw data not found: HTTP ${response.status}`);
                 }
                 
                 const data = await response.json();
@@ -831,13 +841,27 @@
                 const modalData = document.getElementById('modalRawData');
                 const modalStats = document.getElementById('modalStats');
                 
-                modalTitle.textContent = 'Record Raw Data';
-                modalData.textContent = data.raw_data;
-                modalStats.textContent = `Hash: ${data.hash} • ${data.length} bytes • ${new Date(data.timestamp).toLocaleString()}`;
+                let title = 'Attendance Record Raw Data';
+                if (data.record) {
+                    title = `Record: ${data.record.user_id} @ ${data.record.timestamp}`;
+                }
+                
+                modalTitle.textContent = title;
+                modalData.textContent = data.raw_data || 'No raw data available';
+                
+                let stats = `Hash: ${dataHash} • `;
+                if (data.record) {
+                    stats += `Device: ${data.record.device_sn} • User: ${data.record.user_id} • Status: ${data.record.status_text}`;
+                } else {
+                    stats += `Device: ${data.device_sn || 'Unknown'}`;
+                }
+                
+                modalStats.textContent = stats;
                 modal.classList.remove('hidden');
+                showNotification('Raw data loaded successfully', 'success');
                 
             } catch (error) {
-                console.error('Error loading raw data:', error);
+                console.error('Error loading record raw data:', error);
                 showNotification(`Error loading raw data: ${error.message}`, 'error');
             }
         }
