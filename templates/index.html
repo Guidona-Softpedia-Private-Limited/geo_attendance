@@ -1,1318 +1,933 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>eSSL Multi-Device Monitor</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        .card {
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            margin-bottom: 20px;
-            transition: transform 0.2s;
-        }
-        .card:hover {
-            transform: translateY(-2px);
-        }
-        .device-card {
-            border-left: 4px solid;
-            transition: all 0.3s;
-        }
-        .device-active {
-            border-left-color: #10b981;
-        }
-        .device-inactive {
-            border-left-color: #ef4444;
-            opacity: 0.7;
-        }
-        .raw-data-container {
-            font-family: 'Courier New', monospace;
-            background: #1a1a1a;
-            color: #f0f0f0;
-            border-radius: 6px;
-            padding: 15px;
-            margin: 10px 0;
-            max-height: 300px;
-            overflow-y: auto;
-            white-space: pre-wrap;
-            word-break: break-all;
-            font-size: 12px;
-            border: 1px solid #333;
-        }
-        .data-line {
-            border-bottom: 1px solid #2d2d2d;
-            padding: 4px 0;
-            margin: 2px 0;
-        }
-        .data-line:hover {
-            background: #2d2d2d;
-        }
-        .hex-view {
-            color: #4ade80;
-        }
-        .ascii-view {
-            color: #60a5fa;
-        }
-        .tab-button {
-            padding: 8px 16px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .tab-button.active {
-            background: #3b82f6;
-            color: white;
-        }
-        .tab-content {
-            display: none;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .device-status {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-        .status-online {
-            background: #10b981;
-            box-shadow: 0 0 10px #10b981;
-        }
-        .status-offline {
-            background: #ef4444;
-        }
-        .blink {
-            animation: blink 1s infinite;
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        .log-timestamp {
-            color: #9ca3af;
-            font-family: monospace;
-            font-size: 11px;
-            min-width: 140px;
-        }
-        .log-message {
-            word-break: break-word;
-        }
-        .status-badge {
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .status-checkin {
-            background: #10b981;
-            color: white;
-        }
-        .status-checkout {
-            background: #ef4444;
-            color: white;
-        }
-        .status-breakout {
-            background: #f59e0b;
-            color: white;
-        }
-        .status-breakin {
-            background: #8b5cf6;
-            color: white;
-        }
-        .status-other {
-            background: #6b7280;
-            color: white;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eSSL Probe UI - ALL Attendance Data</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+<style>
+    body {
+        margin: 0;
+        font-family: 'Inter', sans-serif;
+        background: radial-gradient(circle at top, #0f2027, #000);
+        color: #e5e7eb;
+    }
+
+    h1 {
+        text-align: center;
+        font-weight: 600;
+        margin: 30px 0;
+        color: #22d3ee;
+        letter-spacing: 1px;
+    }
+
+    .container {
+        max-width: 1300px;
+        margin: auto;
+        padding: 20px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+
+    .card {
+        background: rgba(255, 255, 255, 0.06);
+        backdrop-filter: blur(12px);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 25px;
+        box-shadow: 0 0 40px rgba(34, 211, 238, 0.08);
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    h2 {
+        margin-top: 0;
+        font-weight: 500;
+        color: #38bdf8;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    form {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    label {
+        font-size: 14px;
+        opacity: 0.85;
+    }
+
+    select, button, input {
+        background: #020617;
+        color: #e5e7eb;
+        border: 1px solid rgba(255,255,255,0.15);
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 14px;
+        outline: none;
+    }
+
+    select:hover, button:hover, input:hover {
+        border-color: #22d3ee;
+    }
+
+    button {
+        cursor: pointer;
+        background: linear-gradient(135deg, #22d3ee, #3b82f6);
+        color: #020617;
+        font-weight: 600;
+        transition: transform 0.2s ease;
+        border: none;
+    }
+
+    button:hover {
+        transform: scale(1.05);
+    }
+
+    .btn-small {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+
+    .btn-red {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+    }
+
+    .btn-green {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+    }
+
+    .btn-blue {
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: white;
+    }
+
+    .btn-orange {
+        background: linear-gradient(135deg, #f97316, #ea580c);
+        color: white;
+    }
+
+    .btn-purple {
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        color: white;
+    }
+
+    .btn-yellow {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+        color: white;
+    }
+
+    .logs {
+        background: #020617;
+        border-radius: 14px;
+        padding: 15px;
+        height: 420px;
+        overflow-y: auto;
+        font-family: 'Monaco', 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        box-shadow: inset 0 0 20px rgba(0,0,0,0.6);
+    }
+
+    .log-line {
+        color: #22c55e;
+        white-space: pre-wrap;
+        margin-bottom: 5px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding-bottom: 5px;
+    }
+
+    .att-line {
+        color: #fbbf24;
+        white-space: pre-wrap;
+        margin-bottom: 5px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding-bottom: 5px;
+    }
+
+    .queue-item {
+        background: rgba(34, 211, 238, 0.1);
+        padding: 8px 12px;
+        margin: 5px 0;
+        border-radius: 8px;
+        border-left: 3px solid #22d3ee;
+    }
+
+    footer {
+        text-align: center;
+        font-size: 12px;
+        opacity: 0.5;
+        margin-top: 25px;
+        grid-column: 1 / -1;
+    }
+
+    .command-queue {
+        background: rgba(34, 211, 238, 0.05);
+        padding: 15px;
+        border-radius: 10px;
+        margin-top: 10px;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+
+    .empty-queue {
+        color: rgba(255,255,255,0.3);
+        font-style: italic;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .stats {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 15px;
+        padding: 15px;
+        background: rgba(0,0,0,0.3);
+        border-radius: 12px;
+        flex-wrap: wrap;
+    }
+
+    .stat-item {
+        text-align: center;
+        flex: 1;
+        min-width: 100px;
+        padding: 10px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 8px;
+    }
+
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #22d3ee;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        opacity: 0.7;
+        margin-top: 5px;
+    }
+
+    .device-info {
+        background: rgba(34, 211, 238, 0.1);
+        padding: 15px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+        border-left: 4px solid #22d3ee;
+    }
+
+    .status-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin-right: 8px;
+    }
+
+    .status-online {
+        background-color: #10b981;
+        box-shadow: 0 0 10px #10b981;
+    }
+
+    .status-fetching {
+        background-color: #f59e0b;
+        box-shadow: 0 0 10px #f59e0b;
+        animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.5; }
+        100% { opacity: 1; }
+    }
+
+    .refresh-controls {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-top: 15px;
+        padding: 10px;
+        background: rgba(0,0,0,0.2);
+        border-radius: 8px;
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .search-box {
+        margin: 10px 0;
+        display: flex;
+        gap: 10px;
+    }
+
+    .search-box input {
+        flex: 1;
+    }
+
+    .filter-controls {
+        display: flex;
+        gap: 10px;
+        margin: 10px 0;
+        align-items: center;
+    }
+
+    .time-filter {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    .time-filter input {
+        width: 150px;
+    }
+
+    .record-info {
+        font-size: 11px;
+        color: rgba(255,255,255,0.5);
+        margin-left: 10px;
+    }
+
+    .tab-buttons {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 15px;
+    }
+
+    .tab-button {
+        padding: 8px 15px;
+        background: rgba(255,255,255,0.1);
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        color: rgba(255,255,255,0.7);
+    }
+
+    .tab-button.active {
+        background: #22d3ee;
+        color: #020617;
+        font-weight: bold;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .fetch-status {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: bold;
+        margin-left: 10px;
+    }
+
+    .fetching {
+        background: rgba(245, 158, 11, 0.2);
+        color: #f59e0b;
+        border: 1px solid #f59e0b;
+    }
+
+    .idle {
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+        border: 1px solid #22c55e;
+    }
+
+    .warning-box {
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.3);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 15px 0;
+    }
+</style>
 </head>
-<body class="bg-gray-50">
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-800 mb-2">
-                <i class="fas fa-satellite-dish mr-3 text-blue-600"></i>
-                eSSL Multi-Device Monitor
-            </h1>
-            <p class="text-gray-600 mb-6">Real-time monitoring for multiple biometric devices - Full Attendance Logs</p>
+
+<body>
+
+<h1>⚡ eSSL Probe Dashboard - Fetch ALL Attendance Data</h1>
+
+<div class="container">
+
+    <!-- Left Column -->
+    <div>
+        <!-- Device Info -->
+        <div class="card">
+            <h2>Device Status & Controls
+                <span class="fetch-status {{ 'fetching' if fetching_all else 'idle' }}" id="fetchStatus">
+                    {{ 'FETCHING ALL LOGS' if fetching_all else 'IDLE' }}
+                </span>
+            </h2>
+            <div class="device-info">
+                <div><span class="status-indicator status-online" id="statusIndicator"></span> Server: <strong>Running</strong></div>
+                <div>Device SN: <strong id="deviceSn">{{ device_sn }}</strong></div>
+                <div>Total Records: <strong id="totalRecords">{{ total_records }}</strong></div>
+                <div>Unique Users: <strong id="uniqueUsers">{{ unique_users }}</strong></div>
+                <div>Today's Records: <strong id="todayRecords">{{ today_records }}</strong></div>
+                <div>Last Update: <strong id="lastUpdate">{{ current_time }}</strong></div>
+            </div>
             
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
-                    <div class="text-2xl font-bold text-blue-600">{{ devices|length }}</div>
-                    <div class="text-sm text-gray-600">Devices Detected</div>
+            <!-- Statistics -->
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalRecordsValue">{{ total_records }}</div>
+                    <div class="stat-label">Total Records</div>
                 </div>
-                <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
-                    <div class="text-2xl font-bold text-green-600">{{ total_records }}</div>
-                    <div class="text-sm text-gray-600">Total Records</div>
+                <div class="stat-item">
+                    <div class="stat-value" id="todayRecordsValue">{{ today_records }}</div>
+                    <div class="stat-label">Today</div>
                 </div>
-                <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
-                    <div class="text-2xl font-bold text-purple-600">{{ live_records }}</div>
-                    <div class="text-sm text-gray-600">Today's Records</div>
+                <div class="stat-item">
+                    <div class="stat-value" id="uniqueUsersValue">{{ unique_users }}</div>
+                    <div class="stat-label">Unique Users</div>
                 </div>
-                <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
-                    <div class="text-2xl font-bold text-orange-600">{{ total_data_size }}</div>
-                    <div class="text-sm text-gray-600">Data Received</div>
+                <div class="stat-item">
+                    <div class="stat-value" id="queueCount">{{ queue|length }}</div>
+                    <div class="stat-label">Queued</div>
                 </div>
             </div>
-        </header>
+            
+            <!-- Aggressive Fetch Controls -->
+            <div class="warning-box">
+                <strong>⚠️ GET ALL ATTENDANCE LOGS</strong>
+                <p style="margin: 8px 0; font-size: 13px; opacity: 0.9;">
+                    This will send multiple "GET ATTLOG ALL" commands to fetch all existing logs from the device.
+                </p>
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <a href="/force_fetch_all">
+                        <button class="btn-small btn-yellow">🚨 FORCE FETCH ALL LOGS</button>
+                    </a>
+                    <a href="/reset_device">
+                        <button class="btn-small btn-blue">Reset Connection</button>
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Manual Command -->
+            <div class="card-header">
+                <h3>Send Manual Command</h3>
+            </div>
+            
+            <form method="post" action="/send_command">
+                <label>Endpoint</label>
+                <select name="endpoint">
+                    {% for ep in endpoints %}
+                    <option value="{{ep}}">{{ep}}</option>
+                    {% endfor %}
+                </select>
 
-        <!-- DEVICES SECTION -->
-        <div class="card mb-6">
-            <div class="flex justify-between items-center mb-6">
+                <label>Command</label>
+                <select name="command">
+                    {% for cmd in commands %}
+                    <option value="{{cmd}}">{{cmd}}</option>
+                    {% endfor %}
+                </select>
+
+                <button type="submit">Send</button>
+            </form>
+
+            <!-- Command Queue -->
+            <div style="margin-top: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>Command Queue (<span id="queueCountValue">{{ queue|length }}</span>)</h3>
+                    <form method="post" action="/clear_queue" style="margin: 0;">
+                        <button type="submit" class="btn-small btn-red">Clear Queue</button>
+                    </form>
+                </div>
+                <div class="command-queue" id="commandQueue">
+                    {% if queue %}
+                        {% for cmd in queue %}
+                        <div class="queue-item">{{ cmd }}</div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-queue">No commands in queue</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Logs -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Device Communication Logs</h2>
                 <div>
-                    <h2 class="text-xl font-bold text-gray-800">
-                        <i class="fas fa-microchip mr-2 text-blue-600"></i>
-                        Connected Devices
-                    </h2>
-                    <div class="text-sm text-gray-600 mt-1">
-                        <span class="text-green-600"><i class="fas fa-circle text-xs mr-1"></i>{{ online_devices }} online</span>
-                        <span class="ml-4 text-gray-500"><i class="fas fa-clock mr-1"></i>Updated: {{ last_update_time }}</span>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="rescanDevices()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
-                        <i class="fas fa-sync-alt mr-2"></i>Rescan Devices
-                    </button>
-                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
-                        <i class="fas fa-broadcast-tower mr-2"></i>Get ALL Attendance
-                    </button>
+                    <form method="post" action="/clear_logs" style="display: inline;">
+                        <button type="submit" class="btn-small btn-red">Clear Logs</button>
+                    </form>
                 </div>
             </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {% for device in devices %}
-                <div class="device-card {% if device.last_seen_seconds < 300 %}device-active{% else %}device-inactive{% endif %} p-4 bg-white rounded-lg shadow border border-gray-200">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 class="font-bold text-lg text-gray-800 mb-1">
-                                <span class="device-status {% if device.last_seen_seconds < 300 %}status-online blink{% else %}status-offline{% endif %}"></span>
-                                {% if "BOCK" in device.sn or "560212" in device.sn %}
-                                    {{ device.sn }}
-                                {% else %}
-                                    Device: {{ device.sn }}
-                                {% endif %}
-                            </h3>
-                            <div class="text-sm text-gray-600">
-                                <span class="inline-block mr-4"><i class="fas fa-calendar mr-1"></i>{{ device.first_seen }}</span>
-                                <span class="inline-block"><i class="fas fa-clock mr-1"></i>{{ device.last_seen }}</span>
-                            </div>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-sm font-medium {% if device.last_seen_seconds < 300 %}text-green-600{% else %}text-red-600{% endif %}">
-                                {% if device.last_seen_seconds < 60 %}
-                                    Just now
-                                {% elif device.last_seen_seconds < 300 %}
-                                    {{ (device.last_seen_seconds/60)|int }} min ago
-                                {% else %}
-                                    {{ (device.last_seen_seconds/3600)|int }} hours ago
-                                {% endif %}
-                            </div>
-                            <div class="text-xs text-gray-500 mt-1">Status</div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="text-xs text-gray-500 mb-1">Records</div>
-                            <div class="text-lg font-bold text-blue-600">{{ device.records_count }}</div>
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="text-xs text-gray-500 mb-1">Communications</div>
-                            <div class="text-lg font-bold text-purple-600">{{ device.comms_count }}</div>
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="text-xs text-gray-500 mb-1">IP Address</div>
-                            <div class="text-lg font-bold text-gray-800">{{ device.ip_address }}</div>
-                        </div>
-                        <div class="bg-gray-50 p-3 rounded">
-                            <div class="text-xs text-gray-500 mb-1">Device Name</div>
-                            <div class="text-lg font-bold text-gray-800">{{ device.device_name }}</div>
-                        </div>
-                    </div>
-
-                    <div class="flex gap-2">
-                        <button onclick="sendDeviceCommand('{{ device.sn }}', 'GET ATTLOG ALL')" 
-                                class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
-                            <i class="fas fa-download mr-2"></i>Get ALL Data
-                        </button>
-                        <button onclick="viewDeviceDetails('{{ device.sn }}')" 
-                                class="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
-                            <i class="fas fa-info-circle mr-2"></i>Details
-                        </button>
-                        <button onclick="viewDeviceRawData('{{ device.sn }}')" 
-                                class="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
-                            <i class="fas fa-code mr-2"></i>Raw Data
-                        </button>
-                    </div>
+            
+            <div class="refresh-controls">
+                <button class="btn-small btn-blue" onclick="refreshData()">🔄 Refresh Now</button>
+                <label style="font-size: 12px;">
+                    <input type="checkbox" id="autoRefresh"> Auto-refresh every 5s
+                </label>
+                <div style="margin-left: auto; font-size: 11px; opacity: 0.7;">
+                    <span id="nextRefresh">Auto-refresh off</span>
                 </div>
-                {% endfor %}
-                
-                {% if devices|length < 2 %}
-                <div class="device-card device-inactive p-4 bg-gray-50 rounded-lg shadow-inner border border-dashed border-gray-300 flex flex-col items-center justify-center text-center">
-                    <i class="fas fa-question-circle text-4xl text-gray-400 mb-4"></i>
-                    <h3 class="font-bold text-lg text-gray-600 mb-2">Second Device Not Detected</h3>
-                    <p class="text-gray-500 text-sm mb-4">Waiting for second device to connect...</p>
-                    <div class="text-xs text-gray-400">
-                        <p>Check device configuration:</p>
-                        <p class="mt-1">1. Device IP settings</p>
-                        <p>2. Network connectivity</p>
-                        <p>3. Server URL configuration</p>
-                    </div>
-                </div>
+            </div>
+            
+            <div class="logs" id="logBox">
+                {% if logs %}
+                    {% for line in logs %}
+                    <div class="log-line">{{line}}</div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-queue">No logs yet</div>
                 {% endif %}
             </div>
         </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- RAW DATA MONITOR -->
-            <div class="card lg:col-span-2">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800">
-                            <i class="fas fa-code mr-2 text-green-600"></i>
-                            Raw Data Monitor
-                        </h2>
-                        <div class="text-sm text-gray-600 mt-1">Complete raw body from device communications</div>
-                    </div>
-                    <div class="flex gap-2">
-                        <div class="flex bg-gray-100 rounded-lg p-1">
-                            <button onclick="setDataView('hex')" id="hexTab" class="tab-button active">Hex</button>
-                            <button onclick="setDataView('ascii')" id="asciiTab" class="tab-button">ASCII</button>
-                            <button onclick="setDataView('raw')" id="rawTab" class="tab-button">Raw</button>
-                        </div>
-                        <button onclick="clearRawData()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
-                            <i class="fas fa-trash mr-2"></i>Clear
-                        </button>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm text-gray-600 mb-2">
-                        <span id="currentDevice">All Devices</span>
-                        <span id="dataStats">0 bytes, 0 lines</span>
-                    </div>
-                    <div class="raw-data-container" id="rawDataContainer">
-                        {% if recent_raw_data %}
-                            {% for data in recent_raw_data %}
-                            <div class="data-line">
-                                <div class="text-xs text-gray-500 mb-1">
-                                    [{{ data.timestamp }}] {{ data.device_sn }} ({{ data.length }} bytes)
-                                </div>
-                                <div class="hex-view">
-                                    {{ data.hex_preview }}
-                                </div>
-                                <div class="ascii-view mt-1">
-                                    {{ data.ascii_preview }}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-gray-500 text-center py-8">
-                                <i class="fas fa-database text-3xl mb-3"></i>
-                                <p>No raw data received yet</p>
-                                <p class="text-sm mt-1">Waiting for device communications...</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-4 gap-4 text-center">
-                    <div class="bg-blue-50 p-3 rounded">
-                        <div class="text-lg font-bold text-blue-600" id="totalBytes">{{ total_data_bytes }}</div>
-                        <div class="text-xs text-blue-500">Total Bytes</div>
-                    </div>
-                    <div class="bg-green-50 p-3 rounded">
-                        <div class="text-lg font-bold text-green-600" id="totalComms">{{ total_comms }}</div>
-                        <div class="text-xs text-green-500">Communications</div>
-                    </div>
-                    <div class="bg-purple-50 p-3 rounded">
-                        <div class="text-lg font-bold text-purple-600" id="lastComms">0</div>
-                        <div class="text-xs text-purple-500">Last 5 min</div>
-                    </div>
-                    <div class="bg-orange-50 p-3 rounded">
-                        <div class="text-lg font-bold text-orange-600" id="dataRate">0/s</div>
-                        <div class="text-xs text-orange-500">Data Rate</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- QUICK ACTIONS -->
-            <div class="card">
-                <h2 class="text-xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>
-                    Quick Actions
-                </h2>
-                
-                <div class="space-y-3">
-                    <button onclick="fetchAllDevices()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Fetch ALL Devices Data</span>
-                        <i class="fas fa-download"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Get ALL Attendance Logs</span>
-                        <i class="fas fa-history"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Get All Device Info</span>
-                        <i class="fas fa-info-circle"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Reboot All Devices</span>
-                        <i class="fas fa-power-off"></i>
-                    </button>
-                    
-                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-                        <h3 class="font-medium text-gray-700 mb-3">Manual Command</h3>
-                        <div class="flex gap-2">
-                            <input type="text" id="manualCommand" placeholder="e.g., GET ATTLOG ALL" 
-                                   class="flex-1 p-2 border border-gray-300 rounded text-sm" value="GET ATTLOG ALL">
-                            <button onclick="sendManualCommand()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                        <div class="mt-2 text-xs text-gray-500">
-                            <p>Common Commands:</p>
-                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
-                            <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
-                            <p class="font-mono text-xs">GET OPTION - Get device settings</p>
-                            <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
-                            <p class="font-mono text-xs">REBOOT - Restart device</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ATTENDANCE RECORDS -->
-        <div class="card mt-6">
-            <div class="flex justify-between items-center mb-6">
-                <div>
-                    <h2 class="text-xl font-bold text-gray-800">
-                        <i class="fas fa-history mr-2 text-purple-600"></i>
-                        Recent Attendance Records
-                    </h2>
-                    <div class="text-sm text-gray-600 mt-1">Latest 50 records from all devices • Check-out entries in red</div>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="refreshAttendance()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center">
-                        <i class="fas fa-sync-alt mr-2"></i>Refresh
-                    </button>
-                    <button onclick="exportAttendance()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
-                        <i class="fas fa-file-export mr-2"></i>Export CSV
-                    </button>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Verification</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workcode</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200" id="attendanceTable">
-                        {% if recent_attendance %}
-                            {% for record in recent_attendance %}
-                            <tr class="hover:bg-gray-50 {% if record.status == '1' %}bg-red-50{% elif record.status == '0' %}bg-green-50{% endif %}">
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="flex items-center">
-                                        <div class="flex-shrink-0 h-8 w-8 rounded-full 
-                                            {% if record.status == '1' %}bg-red-100 
-                                            {% elif record.status == '0' %}bg-green-100 
-                                            {% else %}bg-blue-100{% endif %} 
-                                            flex items-center justify-center">
-                                            <span class="text-xs font-bold 
-                                                {% if record.status == '1' %}text-red-600 
-                                                {% elif record.status == '0' %}text-green-600 
-                                                {% else %}text-blue-600{% endif %}">
-                                                {{ record.device_sn|last(4) }}
-                                            </span>
-                                        </div>
-                                        <div class="ml-3">
-                                            <div class="text-sm font-medium text-gray-900">
-                                                {% if "BOCK" in record.device_sn or "560212" in record.device_sn %}
-                                                    {{ record.device_name }}
-                                                {% else %}
-                                                    {{ record.device_name }}
-                                                {% endif %}
-                                            </div>
-                                            <div class="text-xs text-gray-500">{{ record.device_sn }}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm font-bold text-gray-900">{{ record.user_id }}</div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm text-gray-900 font-medium">{{ record.display_date }}</div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <div class="text-sm font-bold text-gray-900">{{ record.display_time }}</div>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    {% if record.status == '0' %}
-                                        <span class="status-badge status-checkin">Check-in</span>
-                                    {% elif record.status == '1' %}
-                                        <span class="status-badge status-checkout">Check-out</span>
-                                    {% elif record.status == '2' %}
-                                        <span class="status-badge status-breakout">Break-out</span>
-                                    {% elif record.status == '3' %}
-                                        <span class="status-badge status-breakin">Break-in</span>
-                                    {% else %}
-                                        <span class="status-badge status-other">{{ record.status_text }}</span>
-                                    {% endif %}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {{ record.verification }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    {{ record.workcode }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    <button onclick="viewRecordRawData('{{ record.raw_data_hash }}')" class="text-blue-600 hover:text-blue-900 text-sm">
-                                        <i class="fas fa-eye mr-1"></i>View
-                                    </button>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="8" class="px-6 py-12 text-center text-gray-500">
-                                    <i class="fas fa-inbox text-4xl mb-4 text-gray-400"></i>
-                                    <p class="font-medium text-lg mb-2">No attendance records yet</p>
-                                    <p class="text-sm mb-4">Fetch ALL data from devices using Quick Actions</p>
-                                    <button onclick="fetchAllDevices()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center mx-auto">
-                                        <i class="fas fa-download mr-2"></i>Fetch ALL Attendance Data
-                                    </button>
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-            
-            {% if recent_attendance %}
-            <div class="mt-4 p-4 bg-gray-50 rounded-lg">
-                <div class="flex justify-between items-center">
-                    <div class="text-sm text-gray-600">
-                        Showing <span class="font-bold">{{ recent_attendance|length }}</span> of <span class="font-bold">{{ total_records }}</span> total records
-                    </div>
-                    <div class="flex gap-2 text-xs">
-                        <span class="flex items-center"><span class="inline-block w-3 h-3 bg-green-600 rounded mr-1"></span> Check-in</span>
-                        <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-red-600 rounded mr-1"></span> Check-out</span>
-                        <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-yellow-600 rounded mr-1"></span> Break-out</span>
-                        <span class="flex items-center ml-4"><span class="inline-block w-3 h-3 bg-purple-600 rounded mr-1"></span> Break-in</span>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- SYSTEM LOGS -->
-        <div class="card mt-6">
-            <div class="flex justify-between items-center mb-4">
-                <div>
-                    <h2 class="text-xl font-bold text-gray-800">
-                        <i class="fas fa-terminal mr-2 text-gray-600"></i>
-                        System Logs
-                    </h2>
-                    <div class="text-sm text-gray-600 mt-1">All system activities and device communications</div>
-                </div>
-                <div class="flex gap-2">
-                    <button onclick="refreshLogs()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center">
-                        <i class="fas fa-redo mr-1"></i> Refresh
-                    </button>
-                    <button onclick="exportLogs()" class="text-sm text-green-600 hover:text-green-800 flex items-center">
-                        <i class="fas fa-download mr-1"></i> Export
-                    </button>
-                    <button onclick="clearLogs()" class="text-sm text-red-600 hover:text-red-800 flex items-center">
-                        <i class="fas fa-trash mr-1"></i> Clear
-                    </button>
-                </div>
-            </div>
-            
-            <div class="bg-gray-900 text-gray-300 font-mono text-sm rounded-lg p-4 max-h-64 overflow-y-auto" id="logPanel">
-                {% for log in logs %}
-                <div class="mb-1 border-b border-gray-800 pb-1 flex">
-                    <span class="log-timestamp">{{ log.split(']')[0] }}]</span>
-                    <span class="log-message flex-1">{{ log.split(']')[1] }}</span>
-                </div>
-                {% endfor %}
-            </div>
-            
-            <div class="mt-4 text-xs text-gray-500">
-                <p>Listening on: <span class="font-mono text-blue-400">{{ server_url }}</span></p>
-                <p class="mt-1">Endpoint: <span class="font-mono">/iclock/cdata.aspx</span> • Commands: <span class="font-mono">GET ATTLOG ALL</span></p>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>eSSL Multi-Device Monitor • v2.2 • Full Attendance Logs Support</p>
-            <p class="mt-1 text-xs">
-                <span class="text-green-600">●</span> Active Devices: {{ online_devices }} | 
-                <span class="text-blue-600">●</span> Total Communications: {{ total_comms }} | 
-                <span class="text-purple-600">●</span> Total Records: {{ total_records }} |
-                Last update: <span id="lastUpdateTime">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span>
-            </p>
-        </footer>
     </div>
 
-    <!-- Raw Data Modal -->
-    <div id="rawDataModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-                <h3 class="text-lg font-bold text-white" id="modalTitle">Raw Data</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white">
-                    <i class="fas fa-times text-xl"></i>
-                </button>
-            </div>
-            <div class="p-4 overflow-auto flex-1">
-                <div class="raw-data-container" id="modalRawData"></div>
-            </div>
-            <div class="p-4 border-t border-gray-700 flex justify-between">
-                <div class="text-sm text-gray-400" id="modalStats"></div>
-                <div class="flex gap-2">
-                    <button onclick="copyRawData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
-                        <i class="fas fa-copy mr-2"></i>Copy to Clipboard
-                    </button>
-                    <button onclick="closeModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm">
-                        Close
-                    </button>
+    <!-- Right Column -->
+    <div>
+        <!-- Attendance Data -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Attendance Data (<span id="attendanceCountValue">{{ total_records }}</span> total records)</h2>
+                <div>
+                    <a href="/export_attendance?format=csv" target="_blank">
+                        <button class="btn-small btn-green">Export CSV</button>
+                    </a>
+                    <a href="/export_attendance?format=json" target="_blank">
+                        <button class="btn-small btn-green">Export JSON</button>
+                    </a>
+                    <form method="post" action="/clear_attendance" style="display: inline;">
+                        <button type="submit" class="btn-small btn-red" onclick="return confirm('Clear ALL attendance data?')">Clear Data</button>
+                    </form>
                 </div>
+            </div>
+            
+            <div class="filter-controls">
+                <div class="search-box">
+                    <input type="text" id="searchUser" placeholder="Search User ID..." oninput="filterAttendance()">
+                    <button class="btn-small" onclick="clearSearch()">Clear</button>
+                </div>
+                <div class="time-filter">
+                    <input type="date" id="dateFilter" onchange="filterAttendance()">
+                    <button class="btn-small" onclick="clearDateFilter()">Clear Date</button>
+                </div>
+            </div>
+            
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchTab('recentTab')">Recent (100)</button>
+                <button class="tab-button" onclick="switchTab('allTab')">All Records</button>
+                <button class="tab-button" onclick="switchTab('todayTab')">Today Only</button>
+            </div>
+            
+            <div id="recentTab" class="tab-content active">
+                <div class="logs" id="attBox" style="height: 380px;">
+                    {% if attendance %}
+                        {% for line in attendance %}
+                        <div class="att-line">{{line}}</div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">
+                            No attendance data received yet
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div id="allTab" class="tab-content">
+                <div class="logs" id="allAttBox" style="height: 380px;">
+                    <div class="empty-queue">Loading all records...</div>
+                </div>
+            </div>
+            
+            <div id="todayTab" class="tab-content">
+                <div class="logs" id="todayAttBox" style="height: 380px;">
+                    <div class="empty-queue">Loading today's records...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <h2>Quick Actions</h2>
+            
+            <div class="action-buttons">
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="GET ATTLOG ALL">
+                    <button type="submit" class="btn-small">📥 Get ALL Attendance</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="FORCE GET ALL LOGS">
+                    <button type="submit" class="btn-small btn-yellow">🚨 Force Fetch ALL</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="INFO">
+                    <button type="submit" class="btn-small">📱 Device Info</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="GET OPTION">
+                    <button type="submit" class="btn-small">⚙️ Get Options</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="SET OPTION RTLOG=1">
+                    <button type="submit" class="btn-small">⚡ Enable RTLOG</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="SET OPTION PUSH=1">
+                    <button type="submit" class="btn-small">📲 Enable PUSH</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="GET USERINFO ALL">
+                    <button type="submit" class="btn-small">👥 Get Users</button>
+                </form>
+                <form method="post" action="/send_command" style="margin: 0;">
+                    <input type="hidden" name="endpoint" value="/iclock/getrequest.aspx">
+                    <input type="hidden" name="command" value="REBOOT">
+                    <button type="submit" class="btn-small btn-purple" onclick="return confirm('Reboot device?')">🔄 Reboot</button>
+                </form>
+            </div>
+            
+            <div style="margin-top: 15px; text-align: center;">
+                <a href="/get_all_attendance" target="_blank">
+                    <button class="btn-small btn-green">API View</button>
+                </a>
+                <button class="btn-small btn-blue" onclick="location.reload()">Reload Page</button>
             </div>
         </div>
     </div>
 
-    <script>
-        // Global variables
-        let currentDataView = 'hex';
-        let currentDeviceFilter = 'all';
-        let dataRateHistory = [];
+    <footer>
+        eSSL / ZKTeco iClock Probe • FastAPI • ALL Attendance Data • Persistent Storage
+    </footer>
 
-        // Set data view mode
-        function setDataView(mode) {
-            currentDataView = mode;
+</div>
+
+<script>
+    // Global variables
+    let refreshInterval;
+    let refreshCountdown = 5;
+    let isAutoRefresh = false;
+    let currentTab = 'recentTab';
+    let allAttendanceData = [];
+    let filteredAttendance = [];
+
+    // Auto-scroll logs to bottom
+    const logBox = document.getElementById("logBox");
+    const attBox = document.getElementById("attBox");
+    
+    if (logBox) logBox.scrollTop = logBox.scrollHeight;
+    if (attBox) attBox.scrollTop = attBox.scrollHeight;
+    
+    // Function to update data via AJAX
+    async function refreshData() {
+        try {
+            const response = await fetch('/get_logs');
+            const data = await response.json();
             
-            // Update tab buttons
-            document.getElementById('hexTab').classList.toggle('active', mode === 'hex');
-            document.getElementById('asciiTab').classList.toggle('active', mode === 'ascii');
-            document.getElementById('rawTab').classList.toggle('active', mode === 'raw');
-            
-            // Refresh data display
-            refreshRawData();
-        }
-
-        // Send command to specific device
-        async function sendDeviceCommand(deviceSn, command) {
-            try {
-                showNotification(`Sending command to ${deviceSn}...`, 'info');
-                
-                const response = await fetch(`/api/device/${deviceSn}/command`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept': 'application/json'
-                    },
-                    body: `command=${encodeURIComponent(command)}`
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const result = await response.json();
-                showNotification(`Command sent to ${deviceSn}: ${result.command}`, 'success');
-                
-                // Refresh data after a short delay
-                setTimeout(() => {
-                    refreshRawData();
-                    refreshAttendance();
-                }, 2000);
-                
-            } catch (error) {
-                console.error('Error sending command:', error);
-                showNotification(`Error sending command: ${error.message}`, 'error');
-            }
-        }
-
-        // Send command to all devices
-        async function sendCommandToAll(command) {
-            if (!confirm(`Send "${command}" to ALL devices?`)) return;
-            
-            try {
-                showNotification(`Broadcasting command to all devices...`, 'info');
-                
-                const response = await fetch('/api/command/broadcast', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept': 'application/json'
-                    },
-                    body: `command=${encodeURIComponent(command)}`
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const result = await response.json();
-                showNotification(`Command broadcasted to ${result.devices_count} devices`, 'success');
-                
-                // Refresh data after a short delay
-                setTimeout(() => {
-                    refreshRawData();
-                    refreshAttendance();
-                }, 3000);
-                
-            } catch (error) {
-                console.error('Error broadcasting command:', error);
-                showNotification(`Error broadcasting command: ${error.message}`, 'error');
-            }
-        }
-
-        // Send manual command
-        async function sendManualCommand() {
-            const command = document.getElementById('manualCommand').value.trim();
-            if (!command) {
-                showNotification('Please enter a command', 'warning');
-                return;
+            // Update logs
+            const logBox = document.getElementById('logBox');
+            if (logBox && data.logs) {
+                logBox.innerHTML = data.logs.map(line => 
+                    `<div class="log-line">${line}</div>`
+                ).join('');
+                logBox.scrollTop = logBox.scrollHeight;
             }
             
-            try {
-                showNotification(`Sending command: ${command}`, 'info');
-                
-                const response = await fetch('/api/command/send', {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                        'Accept': 'application/json'
-                    },
-                    body: `command=${encodeURIComponent(command)}`
-                });
-                
-                if (!response.ok) {
-                    // Try broadcast instead
-                    const broadcastResponse = await fetch('/api/command/broadcast', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `command=${encodeURIComponent(command)}`
-                    });
-                    
-                    if (!broadcastResponse.ok) {
-                        throw new Error('Failed to send command');
-                    }
-                    
-                    const result = await broadcastResponse.json();
-                    showNotification(`Command broadcasted to ${result.devices_count} devices`, 'success');
+            // Update attendance in recent tab
+            const attBox = document.getElementById('attBox');
+            if (attBox && data.attendance) {
+                if (data.attendance.length > 0) {
+                    attBox.innerHTML = data.attendance.map(line => 
+                        `<div class="att-line">${line}</div>`
+                    ).join('');
                 } else {
-                    const result = await response.json();
-                    showNotification(`Command queued: ${result.command}`, 'success');
+                    attBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data received yet</div>';
                 }
-                
-                document.getElementById('manualCommand').value = '';
-                
-                // Refresh data after a short delay
-                setTimeout(() => {
-                    refreshRawData();
-                    refreshAttendance();
-                }, 2000);
-                
-            } catch (error) {
-                console.error('Error sending command:', error);
-                showNotification(`Error sending command: ${error.message}`, 'error');
+                attBox.scrollTop = attBox.scrollHeight;
             }
-        }
-
-        // View device details
-        async function viewDeviceDetails(deviceSn) {
-            try {
-                const response = await fetch(`/api/device/${deviceSn}`);
-                if (!response.ok) {
-                    throw new Error(`Device not found: ${deviceSn}`);
-                }
-                
-                const device = await response.json();
-                
-                const modal = document.getElementById('rawDataModal');
-                const modalTitle = document.getElementById('modalTitle');
-                const modalData = document.getElementById('modalRawData');
-                const modalStats = document.getElementById('modalStats');
-                
-                let details = `=== DEVICE DETAILS ===\n\n`;
-                details += `Serial Number: ${device.sn}\n`;
-                details += `Device Name: ${device.device_name}\n`;
-                details += `Status: ${device.last_seen_seconds < 300 ? '✅ Online' : '❌ Offline'}\n`;
-                details += `Last Seen: ${device.last_seen}\n`;
-                details += `First Seen: ${device.first_seen}\n`;
-                details += `IP Address: ${device.ip_address}\n`;
-                details += `Records Count: ${device.records_count}\n`;
-                details += `Communications: ${device.comms_count}\n`;
-                details += `\n=== DEVICE PARAMETERS ===\n\n`;
-                
-                for (const [key, value] of Object.entries(device.params || {})) {
-                    details += `${key}: ${value}\n`;
-                }
-                
-                if (Object.keys(device.params || {}).length === 0) {
-                    details += `No parameters available\n`;
-                }
-                
-                modalTitle.textContent = `Device Details: ${device.sn}`;
-                modalData.textContent = details;
-                modalStats.textContent = `${device.sn} • ${device.records_count} records • ${device.comms_count} communications`;
-                modal.classList.remove('hidden');
-                
-            } catch (error) {
-                console.error('Error loading device details:', error);
-                showNotification(`Error loading device details: ${error.message}`, 'error');
-            }
-        }
-
-        // View device raw data
-        async function viewDeviceRawData(deviceSn) {
-            try {
-                const response = await fetch(`/api/device/${deviceSn}/raw-data`);
-                if (!response.ok) {
-                    throw new Error(`No data found for device: ${deviceSn}`);
-                }
-                
-                const data = await response.json();
-                
-                const modal = document.getElementById('rawDataModal');
-                const modalTitle = document.getElementById('modalTitle');
-                const modalData = document.getElementById('modalRawData');
-                const modalStats = document.getElementById('modalStats');
-                
-                modalTitle.textContent = `Raw Data: ${deviceSn}`;
-                modalData.textContent = formatRawData(data.raw_data, 'raw');
-                modalStats.textContent = `${deviceSn} • ${data.count} communications • ${data.total_bytes} bytes`;
-                modal.classList.remove('hidden');
-                
-            } catch (error) {
-                console.error('Error loading raw data:', error);
-                showNotification(`Error loading raw data: ${error.message}`, 'error');
-            }
-        }
-
-        // View record raw data
-        async function viewRecordRawData(dataHash) {
-            try {
-                const response = await fetch(`/api/raw-data/${dataHash}`);
-                if (!response.ok) {
-                    throw new Error(`Raw data not found`);
-                }
-                
-                const data = await response.json();
-                
-                const modal = document.getElementById('rawDataModal');
-                const modalTitle = document.getElementById('modalTitle');
-                const modalData = document.getElementById('modalRawData');
-                const modalStats = document.getElementById('modalStats');
-                
-                modalTitle.textContent = 'Record Raw Data';
-                modalData.textContent = data.raw_data;
-                modalStats.textContent = `Hash: ${data.hash} • ${data.length} bytes • ${new Date(data.timestamp).toLocaleString()}`;
-                modal.classList.remove('hidden');
-                
-            } catch (error) {
-                console.error('Error loading raw data:', error);
-                showNotification(`Error loading raw data: ${error.message}`, 'error');
-            }
-        }
-
-        // Close modal
-        function closeModal() {
-            document.getElementById('rawDataModal').classList.add('hidden');
-        }
-
-        // Copy raw data to clipboard
-        async function copyRawData() {
-            const data = document.getElementById('modalRawData').textContent;
-            try {
-                await navigator.clipboard.writeText(data);
-                showNotification('Raw data copied to clipboard', 'success');
-            } catch (error) {
-                console.error('Failed to copy to clipboard:', error);
-                showNotification('Failed to copy to clipboard', 'error');
-            }
-        }
-
-        // Refresh raw data display
-        async function refreshRawData() {
-            try {
-                const response = await fetch('/api/raw-data/recent?limit=30');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                const container = document.getElementById('rawDataContainer');
-                const stats = document.getElementById('dataStats');
-                
-                if (!data || data.length === 0) {
-                    container.innerHTML = `
-                        <div class="text-gray-500 text-center py-8">
-                            <i class="fas fa-database text-3xl mb-3"></i>
-                            <p>No raw data received yet</p>
-                            <p class="text-sm mt-1">Waiting for device communications...</p>
-                        </div>
-                    `;
-                    stats.textContent = '0 bytes, 0 lines';
-                    return;
-                }
-                
-                let html = '';
-                let totalBytes = 0;
-                
-                data.forEach(item => {
-                    totalBytes += item.length;
-                    html += `
-                        <div class="data-line">
-                            <div class="text-xs text-gray-500 mb-1">
-                                [${item.timestamp}] ${item.device_sn} (${item.length} bytes) ${item.direction || ''}
-                            </div>
-                            <div class="${currentDataView}-view">
-                                ${formatRawData(item.raw_data, currentDataView)}
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                container.innerHTML = html;
-                stats.textContent = `${totalBytes} bytes, ${data.length} lines`;
-                
-                // Auto-scroll to bottom
-                container.scrollTop = container.scrollHeight;
-                
-            } catch (error) {
-                console.error('Error refreshing raw data:', error);
-            }
-        }
-
-        // Format raw data for display
-        function formatRawData(data, mode) {
-            if (!data) return '';
             
-            switch(mode) {
-                case 'hex':
-                    // Show hex with line breaks every 32 bytes
-                    let hex = '';
-                    for (let i = 0; i < data.length; i += 32) {
-                        const chunk = data.slice(i, i + 32);
-                        hex += chunk.split('').map(c => 
-                            c.charCodeAt(0).toString(16).padStart(2, '0')
-                        ).join(' ') + '\n';
-                    }
-                    return hex;
-                    
-                case 'ascii':
-                    // Show ASCII with control characters as dots
-                    return data.replace(/[^\x20-\x7E\r\n\t]/g, '.');
-                    
-                case 'raw':
-                default:
-                    return data;
+            // Update command queue
+            const queueDiv = document.getElementById('commandQueue');
+            if (queueDiv && data.queue) {
+                if (data.queue.length > 0) {
+                    queueDiv.innerHTML = data.queue.map(cmd => 
+                        `<div class="queue-item">${cmd}</div>`
+                    ).join('');
+                } else {
+                    queueDiv.innerHTML = '<div class="empty-queue">No commands in queue</div>';
+                }
             }
-        }
-
-        // Clear raw data
-        async function clearRawData() {
-            if (!confirm('Clear raw data display? This does not delete stored data.')) return;
             
-            document.getElementById('rawDataContainer').innerHTML = `
-                <div class="text-gray-500 text-center py-8">
-                    <i class="fas fa-database text-3xl mb-3"></i>
-                    <p>Raw data cleared</p>
-                    <p class="text-sm mt-1">Waiting for new device communications...</p>
-                </div>
-            `;
-            document.getElementById('dataStats').textContent = '0 bytes, 0 lines';
-        }
-
-        // Rescan devices
-        async function rescanDevices() {
-            try {
-                showNotification('Rescanning devices...', 'info');
-                
-                const response = await fetch('/api/devices/rescan', { 
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const result = await response.json();
-                showNotification(`Rescanned devices: ${result.devices_count} found`, 'success');
-                
-                // Reload page after 1 second
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
-                
-            } catch (error) {
-                console.error('Error rescanning devices:', error);
-                showNotification(`Error rescanning devices: ${error.message}`, 'error');
-            }
-        }
-
-        // Fetch all devices data
-        async function fetchAllDevices() {
-            if (!confirm('Fetch ALL data from all devices? This will get ALL attendance logs and may take some time.')) return;
+            // Update counters
+            document.getElementById('logsCount').textContent = data.logs_count;
+            document.getElementById('totalRecords').textContent = data.attendance_count;
+            document.getElementById('totalRecordsValue').textContent = data.attendance_count;
+            document.getElementById('todayRecords').textContent = data.today_count;
+            document.getElementById('todayRecordsValue').textContent = data.today_count;
+            document.getElementById('uniqueUsers').textContent = data.unique_users;
+            document.getElementById('uniqueUsersValue').textContent = data.unique_users;
+            document.getElementById('queueCount').textContent = data.queue_count;
+            document.getElementById('queueCountValue').textContent = data.queue_count;
+            document.getElementById('deviceSn').textContent = data.device_sn || 'Not detected yet';
+            document.getElementById('attendanceCountValue').textContent = data.attendance_count;
             
-            try {
-                showNotification('Fetching ALL data from all devices...', 'info');
-                
-                const response = await fetch('/api/fetch/all', { 
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+            // Update fetch status
+            const fetchStatus = document.getElementById('fetchStatus');
+            if (fetchStatus) {
+                if (data.fetching_all) {
+                    fetchStatus.className = 'fetch-status fetching';
+                    fetchStatus.textContent = 'FETCHING ALL LOGS';
+                } else {
+                    fetchStatus.className = 'fetch-status idle';
+                    fetchStatus.textContent = 'IDLE';
                 }
-                
-                const result = await response.json();
-                showNotification(`Fetch initiated for ${result.devices_count} devices. Getting ALL attendance logs...`, 'success');
-                
-                // Refresh data after a delay
-                setTimeout(() => {
-                    refreshAttendance();
-                    refreshRawData();
-                }, 5000);
-                
-            } catch (error) {
-                console.error('Error fetching devices:', error);
-                showNotification(`Error fetching devices: ${error.message}`, 'error');
             }
-        }
-
-        // Refresh attendance
-        async function refreshAttendance() {
-            try {
-                showNotification('Refreshing attendance records...', 'info');
-                
-                const response = await fetch('/api/attendance/recent?limit=100');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const data = await response.json();
-                
-                const table = document.getElementById('attendanceTable');
-                
-                if (!data || data.length === 0) {
-                    table.innerHTML = `
-                        <tr>
-                            <td colspan="8" class="px-6 py-12 text-center text-gray-500">
-                                <i class="fas fa-inbox text-4xl mb-4 text-gray-400"></i>
-                                <p class="font-medium text-lg mb-2">No attendance records yet</p>
-                                <p class="text-sm mb-4">Fetch ALL data from devices using Quick Actions</p>
-                                <button onclick="fetchAllDevices()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center mx-auto">
-                                    <i class="fas fa-download mr-2"></i>Fetch ALL Attendance Data
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                    return;
-                }
-                
-                let html = '';
-                data.forEach(record => {
-                    let statusBadge = '';
-                    if (record.status === '0') {
-                        statusBadge = '<span class="status-badge status-checkin">Check-in</span>';
-                    } else if (record.status === '1') {
-                        statusBadge = '<span class="status-badge status-checkout">Check-out</span>';
-                    } else if (record.status === '2') {
-                        statusBadge = '<span class="status-badge status-breakout">Break-out</span>';
-                    } else if (record.status === '3') {
-                        statusBadge = '<span class="status-badge status-breakin">Break-in</span>';
-                    } else {
-                        statusBadge = `<span class="status-badge status-other">${record.status_text || 'Unknown'}</span>`;
-                    }
-                    
-                    html += `
-                        <tr class="hover:bg-gray-50 ${record.status === '1' ? 'bg-red-50' : record.status === '0' ? 'bg-green-50' : ''}">
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="flex items-center">
-                                    <div class="flex-shrink-0 h-8 w-8 rounded-full 
-                                        ${record.status === '1' ? 'bg-red-100' : 
-                                          record.status === '0' ? 'bg-green-100' : 
-                                          'bg-blue-100'} 
-                                        flex items-center justify-center">
-                                        <span class="text-xs font-bold 
-                                            ${record.status === '1' ? 'text-red-600' : 
-                                              record.status === '0' ? 'text-green-600' : 
-                                              'text-blue-600'}">
-                                            ${record.device_sn ? record.device_sn.slice(-4) : 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div class="ml-3">
-                                        <div class="text-sm font-medium text-gray-900">
-                                            ${record.device_name || 'Unknown Device'}
-                                        </div>
-                                        <div class="text-xs text-gray-500">${record.device_sn || 'N/A'}</div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-bold text-gray-900">${record.user_id || 'N/A'}</div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm text-gray-900 font-medium">${record.display_date || 'N/A'}</div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <div class="text-sm font-bold text-gray-900">${record.display_time || 'N/A'}</div>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                ${statusBadge}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                ${record.verification || ''}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                ${record.workcode || ''}
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <button onclick="viewRecordRawData('${record.raw_data_hash || ''}')" class="text-blue-600 hover:text-blue-900 text-sm">
-                                    <i class="fas fa-eye mr-1"></i>View
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                });
-                
-                table.innerHTML = html;
-                showNotification(`Attendance refreshed: ${data.length} records`, 'success');
-                
-            } catch (error) {
-                console.error('Error refreshing attendance:', error);
-                showNotification(`Error refreshing attendance: ${error.message}`, 'error');
-            }
-        }
-
-        // Export attendance to CSV
-        async function exportAttendance() {
-            try {
-                const response = await fetch('/api/export/csv');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `attendance_export_${new Date().toISOString().split('T')[0]}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-                
-                showNotification('Attendance data exported to CSV', 'success');
-                
-            } catch (error) {
-                console.error('Error exporting attendance:', error);
-                showNotification(`Error exporting attendance: ${error.message}`, 'error');
-            }
-        }
-
-        // Refresh logs
-        async function refreshLogs() {
-            try {
-                const response = await fetch('/api/logs/recent?limit=150');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const logs = await response.json();
-                
-                const logPanel = document.getElementById('logPanel');
-                let html = '';
-                
-                logs.forEach(log => {
-                    const parts = log.split(']');
-                    if (parts.length >= 2) {
-                        html += `
-                            <div class="mb-1 border-b border-gray-800 pb-1 flex">
-                                <span class="log-timestamp">${parts[0]}]</span>
-                                <span class="log-message flex-1">${parts.slice(1).join(']')}</span>
-                            </div>
-                        `;
-                    } else {
-                        html += `<div class="mb-1 border-b border-gray-800 pb-1">${log}</div>`;
-                    }
-                });
-                
-                logPanel.innerHTML = html;
-                logPanel.scrollTop = logPanel.scrollHeight;
-                
-            } catch (error) {
-                console.error('Error refreshing logs:', error);
-            }
-        }
-
-        // Export logs
-        async function exportLogs() {
-            try {
-                const response = await fetch('/api/logs/export');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `essl_logs_${new Date().toISOString().split('T')[0]}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-                
-                showNotification('Logs exported', 'success');
-                
-            } catch (error) {
-                console.error('Error exporting logs:', error);
-                showNotification(`Error exporting logs: ${error.message}`, 'error');
-            }
-        }
-
-        // Clear logs
-        async function clearLogs() {
-            if (!confirm('Clear all system logs? This action cannot be undone.')) return;
             
-            try {
-                const response = await fetch('/api/logs/clear', { 
-                    method: 'DELETE',
-                    headers: { 'Accept': 'application/json' }
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                const result = await response.json();
-                showNotification(result.message || 'Logs cleared', 'success');
-                setTimeout(refreshLogs, 1000);
-                
-            } catch (error) {
-                console.error('Error clearing logs:', error);
-                showNotification(`Error clearing logs: ${error.message}`, 'error');
-            }
-        }
-
-        // Show notification
-        function showNotification(message, type = 'info') {
-            // Remove existing notifications
-            document.querySelectorAll('.notification').forEach(el => el.remove());
-            
-            const notification = document.createElement('div');
-            notification.className = `notification fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 transform transition-all duration-300 ${
-                type === 'success' ? 'bg-green-500 text-white' :
-                type === 'error' ? 'bg-red-500 text-white' :
-                type === 'warning' ? 'bg-yellow-500 text-white' :
-                'bg-blue-500 text-white'
-            }`;
-            notification.innerHTML = `
-                <div class="flex items-center">
-                    <i class="fas fa-${type === 'success' ? 'check-circle' : 
-                                       type === 'error' ? 'exclamation-circle' : 
-                                       type === 'warning' ? 'exclamation-triangle' : 'info-circle'} mr-3"></i>
-                    <span>${message}</span>
-                </div>
-            `;
-            
-            document.body.appendChild(notification);
-            
-            // Auto-remove after 3 seconds
-            setTimeout(() => {
-                notification.style.opacity = '0';
-                notification.style.transform = 'translateX(100px)';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 3000);
-        }
-
-        // Update last update time
-        function updateLastUpdateTime() {
+            // Update last update time
             const now = new Date();
-            const timeString = now.toLocaleTimeString('en-US', { 
-                hour12: false,
+            const formattedTime = now.toLocaleString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit',
-                second: '2-digit'
+                second: '2-digit',
+                hour12: true
             });
-            document.getElementById('lastUpdateTime').textContent = 
-                `${now.toLocaleDateString()} ${timeString}`;
+            document.getElementById('lastUpdate').textContent = formattedTime;
+            
+            // Reset countdown if auto-refresh is enabled
+            if (isAutoRefresh) {
+                refreshCountdown = 5;
+            }
+            
+        } catch (error) {
+            console.error('Error refreshing data:', error);
         }
-
-        // Auto-refresh functions
-        setInterval(refreshRawData, 10000);  // Refresh raw data every 10 seconds
-        setInterval(refreshLogs, 10000);     // Refresh logs every 10 seconds
-        setInterval(updateLastUpdateTime, 60000);  // Update time every minute
+    }
+    
+    // Function to load all attendance data
+    async function loadAllAttendance() {
+        try {
+            const response = await fetch('/get_all_attendance');
+            const data = await response.json();
+            allAttendanceData = data.data || [];
+            filteredAttendance = [...allAttendanceData];
+            
+            // Display in all tab
+            const allAttBox = document.getElementById('allAttBox');
+            if (allAttBox) {
+                if (allAttendanceData.length > 0) {
+                    allAttBox.innerHTML = allAttendanceData.map(record => 
+                        `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                    ).join('');
+                    allAttBox.scrollTop = allAttBox.scrollHeight;
+                } else {
+                    allAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data available</div>';
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error loading all attendance:', error);
+        }
+    }
+    
+    // Function to load today's attendance
+    function loadTodayAttendance() {
+        const today = new Date().toISOString().split('T')[0];
+        const todayData = allAttendanceData.filter(record => 
+            record.timestamp && record.timestamp.startsWith(today)
+        );
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            updateLastUpdateTime();
+        const todayAttBox = document.getElementById('todayAttBox');
+        if (todayAttBox) {
+            if (todayData.length > 0) {
+                todayAttBox.innerHTML = todayData.map(record => 
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                ).join('');
+                todayAttBox.scrollTop = todayAttBox.scrollHeight;
+            } else {
+                todayAttBox.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No attendance data for today</div>';
+            }
+        }
+    }
+    
+    // Function to filter attendance
+    function filterAttendance() {
+        const searchTerm = document.getElementById('searchUser').value.toLowerCase();
+        const dateFilter = document.getElementById('dateFilter').value;
+        
+        filteredAttendance = allAttendanceData.filter(record => {
+            const matchesSearch = !searchTerm || 
+                record.user_id.toLowerCase().includes(searchTerm) ||
+                record.raw.toLowerCase().includes(searchTerm);
             
-            // Auto-scroll logs to bottom
-            const logPanel = document.getElementById('logPanel');
-            if (logPanel) {
-                logPanel.scrollTop = logPanel.scrollHeight;
+            const matchesDate = !dateFilter || 
+                (record.timestamp && record.timestamp.startsWith(dateFilter));
+            
+            return matchesSearch && matchesDate;
+        });
+        
+        // Update current tab
+        updateCurrentTab();
+    }
+    
+    // Function to update current tab
+    function updateCurrentTab() {
+        const containerId = currentTab + 'Box';
+        const container = document.getElementById(containerId);
+        
+        if (!container) return;
+        
+        if (currentTab === 'allTab') {
+            if (filteredAttendance.length > 0) {
+                container.innerHTML = filteredAttendance.map(record => 
+                    `<div class="att-line">${record.user_id}\t${record.timestamp}\t${record.status}\t${record.status_text}\t${record.verification}\t${record.workcode}</div>`
+                ).join('');
+            } else {
+                container.innerHTML = '<div class="empty-queue" style="height: 100%; display: flex; align-items: center; justify-content: center;">No matching records found</div>';
+            }
+        }
+    }
+    
+    // Function to clear search
+    function clearSearch() {
+        document.getElementById('searchUser').value = '';
+        filterAttendance();
+    }
+    
+    // Function to clear date filter
+    function clearDateFilter() {
+        document.getElementById('dateFilter').value = '';
+        filterAttendance();
+    }
+    
+    // Function to switch tabs
+    function switchTab(tabName) {
+        currentTab = tabName;
+        
+        // Update tab buttons
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelector(`[onclick="switchTab('${tabName}')"]`).classList.add('active');
+        
+        // Update tab content
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+        document.getElementById(tabName).classList.add('active');
+        
+        // Load data for tab if needed
+        if (tabName === 'allTab' && allAttendanceData.length === 0) {
+            loadAllAttendance();
+        } else if (tabName === 'todayTab') {
+            loadTodayAttendance();
+        } else if (tabName === 'allTab') {
+            filterAttendance();
+        }
+    }
+    
+    // Function to update countdown
+    function updateCountdown() {
+        if (isAutoRefresh) {
+            refreshCountdown--;
+            document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
+            
+            if (refreshCountdown <= 0) {
+                refreshData();
+                refreshCountdown = 5;
+            }
+        }
+    }
+    
+    // Initialize auto-refresh
+    function initAutoRefresh() {
+        const autoRefreshCheckbox = document.getElementById('autoRefresh');
+        if (autoRefreshCheckbox) {
+            isAutoRefresh = autoRefreshCheckbox.checked;
+            
+            // Clear existing interval
+            if (refreshInterval) {
+                clearInterval(refreshInterval);
             }
             
-            // Auto-scroll raw data to bottom
-            const rawDataContainer = document.getElementById('rawDataContainer');
-            if (rawDataContainer) {
-                rawDataContainer.scrollTop = rawDataContainer.scrollHeight;
+            // Set up new interval if auto-refresh is enabled
+            if (isAutoRefresh) {
+                refreshInterval = setInterval(updateCountdown, 1000);
+                document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
+            } else {
+                document.getElementById('nextRefresh').textContent = 'Auto-refresh off';
             }
             
-            // Set default command to GET ATTLOG ALL
-            document.getElementById('manualCommand').value = 'GET ATTLOG ALL';
-            
-            // Add keyboard shortcuts
-            document.addEventListener('keydown', function(e) {
-                // Ctrl+R to refresh attendance
-                if (e.ctrlKey && e.key === 'r') {
-                    e.preventDefault();
-                    refreshAttendance();
-                }
-                // Ctrl+F to fetch all data
-                if (e.ctrlKey && e.key === 'f') {
-                    e.preventDefault();
-                    fetchAllDevices();
-                }
-                // Esc to close modal
-                if (e.key === 'Escape') {
-                    closeModal();
+            // Add event listener for checkbox
+            autoRefreshCheckbox.addEventListener('change', function() {
+                isAutoRefresh = this.checked;
+                if (isAutoRefresh) {
+                    refreshCountdown = 5;
+                    refreshInterval = setInterval(updateCountdown, 1000);
+                    document.getElementById('nextRefresh').textContent = `Next: ${refreshCountdown}s`;
+                } else {
+                    clearInterval(refreshInterval);
+                    document.getElementById('nextRefresh').textContent = 'Auto-refresh off';
                 }
             });
+        }
+    }
+    
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        initAutoRefresh();
+        
+        // Load all attendance data initially
+        loadAllAttendance();
+        
+        // Refresh when page becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                refreshData();
+                if (currentTab === 'allTab') {
+                    loadAllAttendance();
+                }
+            }
         });
-    </script>
+        
+        // Auto-refresh data every 30 seconds even without checkbox
+        setInterval(refreshData, 30000);
+    });
+    
+    // Manual refresh button
+    window.refreshData = refreshData;
+    window.switchTab = switchTab;
+    window.filterAttendance = filterAttendance;
+    window.clearSearch = clearSearch;
+    window.clearDateFilter = clearDateFilter;
+</script>
+
 </body>
 </html>
