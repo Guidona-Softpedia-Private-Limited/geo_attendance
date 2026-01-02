@@ -11,6 +11,7 @@ import csv
 import io
 from pathlib import Path
 import hashlib
+import base64
 
 app = FastAPI()
 
@@ -26,13 +27,16 @@ RAW_DATA_STORE: List[Dict[str, Any]] = []
 COMMAND_QUEUE: List[str] = []
 # Multiple devices support
 DEVICES: List[Dict[str, Any]] = []
+# User mapping storage (device_sn -> {uid -> user_info})
+USER_MAPPINGS: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
 # File for persistent storage
 DATA_FILE = "attendance_data.json"
 LOG_FILE = "device_logs.txt"
 RAW_DATA_FILE = "raw_data.json"
 DEVICES_FILE = "devices.json"
-RECORD_RAW_FILE = "record_raw_data.json"  # New file for individual record raw data
+RECORD_RAW_FILE = "record_raw_data.json"
+USER_MAPPINGS_FILE = "user_mappings.json"  # New file for user mappings
 
 # Track device connection
 IS_FETCHING_ALL_LOGS = False
@@ -43,7 +47,7 @@ LAST_DEVICE_CONTACT = None
 
 def load_persistent_data():
     """Load previously saved data from files"""
-    global ATTENDANCE_DATA, LOGS, RAW_DATA_STORE, DEVICES
+    global ATTENDANCE_DATA, LOGS, RAW_DATA_STORE, DEVICES, USER_MAPPINGS
     
     try:
         # Load attendance data
@@ -95,6 +99,15 @@ def load_persistent_data():
                 print(f"📂 Loaded record raw data for {len(record_raw_data)} records")
         except Exception as e:
             print(f"⚠️ Error loading record raw data: {e}")
+    
+    # Load user mappings if exists
+    if os.path.exists(USER_MAPPINGS_FILE):
+        try:
+            with open(USER_MAPPINGS_FILE, 'r') as f:
+                USER_MAPPINGS = json.load(f)
+                print(f"📂 Loaded user mappings for {len(USER_MAPPINGS)} devices")
+        except Exception as e:
+            print(f"⚠️ Error loading user mappings: {e}")
 
 def save_persistent_data():
     """Save current data to files"""
@@ -144,6 +157,13 @@ def save_persistent_data():
             json.dump(record_raw_data, f, indent=2)
     except Exception as e:
         print(f"⚠️ Error saving record raw data: {e}")
+    
+    # Save user mappings
+    try:
+        with open(USER_MAPPINGS_FILE, 'w') as f:
+            json.dump(USER_MAPPINGS, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Error saving user mappings: {e}")
 
 def log(msg: str):
     """Add a log entry with timestamp"""
@@ -246,6 +266,7 @@ def update_device_info(sn: str, ip_address: str = "", data: Dict[str, Any] = Non
         device['last_seen_seconds'] = (now - last_seen).total_seconds()
     
     save_persistent_data()
+    return display_sn
 
 def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, Any]:
     """
@@ -261,8 +282,28 @@ def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, An
     if device_sn.startswith('B') and len(device_sn) > 12:
         display_sn = device_sn[1:]
     
+    user_id = parts[0]
+    
+    # Try to get user name from mappings
+    user_name = "Unknown"
+    user_info = {}
+    
+    if display_sn in USER_MAPPINGS:
+        if user_id in USER_MAPPINGS[display_sn]:
+            user_info = USER_MAPPINGS[display_sn][user_id]
+            user_name = user_info.get('name', 'Unknown')
+        else:
+            # Check all devices for this user ID
+            for device_sn_key, users in USER_MAPPINGS.items():
+                if user_id in users:
+                    user_info = users[user_id]
+                    user_name = user_info.get('name', 'Unknown')
+                    break
+    
     record = {
-        'user_id': parts[0],
+        'user_id': user_id,
+        'user_name': user_name,
+        'user_info': user_info,
         'timestamp': parts[1],
         'status': parts[2],
         'verification': parts[3] if len(parts) > 3 else '',
@@ -321,6 +362,57 @@ def parse_attendance_line(line: str, device_sn: str = "Unknown") -> Dict[str, An
     
     return record
 
+def update_user_mappings(device_sn: str, users_data: List[Dict[str, Any]]):
+    """Update user mappings for a specific device"""
+    global USER_MAPPINGS
+    
+    # Clean device SN
+    display_sn = device_sn
+    if device_sn.startswith('B') and len(device_sn) > 12:
+        display_sn = device_sn[1:]
+    
+    if display_sn not in USER_MAPPINGS:
+        USER_MAPPINGS[display_sn] = {}
+    
+    updated_count = 0
+    new_count = 0
+    
+    for user_data in users_data:
+        uid = str(user_data.get('uid', ''))
+        user_id = str(user_data.get('user_id', ''))
+        
+        if not uid and not user_id:
+            continue
+        
+        # Use UID as primary key, fall back to user_id
+        key = uid if uid else user_id
+        
+        if key in USER_MAPPINGS[display_sn]:
+            updated_count += 1
+        else:
+            new_count += 1
+        
+        USER_MAPPINGS[display_sn][key] = {
+            'uid': uid,
+            'name': user_data.get('name', 'Unknown'),
+            'privilege': user_data.get('privilege', 'User'),
+            'password': user_data.get('password', ''),
+            'group_id': user_data.get('group_id', ''),
+            'user_id': user_id,
+            'last_updated': datetime.utcnow().isoformat(),
+            'device_sn': display_sn
+        }
+    
+    log(f"📝 Updated user mappings for {display_sn}: {new_count} new, {updated_count} updated (Total: {len(USER_MAPPINGS[display_sn])})")
+    save_persistent_data()
+    
+    return {
+        'device_sn': display_sn,
+        'total_users': len(USER_MAPPINGS[display_sn]),
+        'new_users': new_count,
+        'updated_users': updated_count
+    }
+
 async def log_request(request: Request, body: str):
     """Log device request details"""
     global DEVICE_CONNECTED, LAST_DEVICE_CONTACT
@@ -378,7 +470,7 @@ async def startup_event():
     asyncio.create_task(auto_send_commands())
     asyncio.create_task(periodic_save())
     asyncio.create_task(check_device_status())
-    log("🚀 eSSL Multi-Device Monitor Started")
+    log("🚀 eSSL Multi-Device Monitor Started with User Mapping")
 
 async def periodic_save():
     """Periodically save data to disk"""
@@ -418,6 +510,11 @@ async def home(request: Request):
     total_data_size = f"{total_data_bytes / 1024:.1f} KB"
     total_comms = sum(d.get('comms_count', 0) for d in DEVICES)
     
+    # Calculate user statistics
+    total_users = 0
+    for device_sn, users in USER_MAPPINGS.items():
+        total_users += len(users)
+    
     # Format device data for display
     display_devices = []
     for device in DEVICES:
@@ -437,6 +534,9 @@ async def home(request: Request):
         if not display_device.get('device_name'):
             sn = display_device.get('sn', '')
             display_device['device_name'] = f"Device {sn[-8:]}" if len(sn) > 8 else f"Device {sn}"
+        
+        # Add user count
+        display_device['user_count'] = len(USER_MAPPINGS.get(display_device.get('sn', ''), {}))
         
         display_devices.append(display_device)
     
@@ -468,6 +568,21 @@ async def home(request: Request):
     # Get server URL for display
     server_url = str(request.base_url).rstrip('/')
     
+    # Get user mapping statistics
+    user_stats = []
+    for device_sn, users in USER_MAPPINGS.items():
+        device_name = "Unknown Device"
+        for device in DEVICES:
+            if device.get('sn') == device_sn:
+                device_name = device.get('device_name', f"Device {device_sn}")
+                break
+        
+        user_stats.append({
+            'device_sn': device_sn,
+            'device_name': device_name,
+            'user_count': len(users)
+        })
+    
     return templates.TemplateResponse(
         "index.html",
         {
@@ -478,13 +593,16 @@ async def home(request: Request):
             "total_data_size": total_data_size,
             "total_data_bytes": total_data_bytes,
             "total_comms": total_comms,
+            "total_users": total_users,
             "online_devices": online_devices,
             "last_update_time": current_time.strftime("%Y-%m-%d %H:%M:%S"),
             "recent_attendance": recent_attendance,
             "recent_raw_data": recent_raw_data,
             "logs": LOGS[-100:],
             "server_url": server_url,
-            "now": current_time
+            "now": current_time,
+            "user_stats": user_stats,
+            "user_mappings": USER_MAPPINGS
         }
     )
 
@@ -627,7 +745,7 @@ async def export_csv():
     writer = csv.writer(output)
     
     # Write header
-    writer.writerow(["User ID", "Date", "Time", "Status", "Status Text", "Verification", "Workcode", "Device SN", "Device Name", "Received At"])
+    writer.writerow(["User ID", "User Name", "Date", "Time", "Status", "Status Text", "Verification", "Workcode", "Device SN", "Device Name", "Received At"])
     
     # Sort by datetime in descending order
     sorted_data = sorted(ATTENDANCE_DATA, key=lambda x: x.get('sort_datetime', 0), reverse=True)
@@ -636,6 +754,7 @@ async def export_csv():
     for record in sorted_data:
         writer.writerow([
             record.get('user_id', ''),
+            record.get('user_name', 'Unknown'),
             record.get('display_date', ''),
             record.get('display_time', ''),
             record.get('status', ''),
@@ -696,6 +815,166 @@ async def clear_logs():
     log("🧹 All logs cleared")
     save_persistent_data()
     return {"message": "Logs cleared"}
+
+# ---------------- USER MAPPING ENDPOINTS ----------------
+
+@app.get("/api/users")
+async def get_all_users():
+    """Get all users from all devices"""
+    all_users = []
+    for device_sn, users in USER_MAPPINGS.items():
+        for uid, user_info in users.items():
+            all_users.append({
+                'device_sn': device_sn,
+                'uid': uid,
+                **user_info
+            })
+    
+    return {
+        "users": all_users,
+        "count": len(all_users),
+        "devices": len(USER_MAPPINGS)
+    }
+
+@app.get("/api/device/{device_sn}/users")
+async def get_device_users(device_sn: str):
+    """Get users for specific device"""
+    # Try to find device by both original and display SN
+    display_sn = device_sn
+    if device_sn.startswith('B') and len(device_sn) > 12:
+        display_sn = device_sn[1:]
+    
+    if display_sn in USER_MAPPINGS:
+        users_list = []
+        for uid, user_info in USER_MAPPINGS[display_sn].items():
+            users_list.append({
+                'uid': uid,
+                **user_info
+            })
+        
+        return {
+            "device_sn": display_sn,
+            "users": users_list,
+            "count": len(users_list)
+        }
+    
+    raise HTTPException(status_code=404, detail="No users found for this device")
+
+@app.post("/api/device/{device_sn}/users/import")
+async def import_device_users(device_sn: str, request: Request):
+    """Import user data from ZK device output"""
+    try:
+        data = await request.json()
+        
+        if not data or 'users' not in data:
+            raise HTTPException(status_code=400, detail="Invalid data format. Expected {'users': [...]}")
+        
+        result = update_user_mappings(device_sn, data['users'])
+        
+        return {
+            "status": "success",
+            **result,
+            "message": f"Successfully imported {result['total_users']} users for device {result['device_sn']}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error importing users: {str(e)}")
+
+@app.post("/api/device/{device_sn}/users/fetch")
+async def fetch_device_users(device_sn: str):
+    """Manually trigger user fetch for device"""
+    COMMAND_QUEUE.append("GET USERINFO ALL")  # Command to fetch all users
+    log(f"📤 User fetch queued for {device_sn}")
+    
+    return {
+        "status": "success",
+        "device_sn": device_sn,
+        "message": "User fetch command queued. Device will fetch users on next communication."
+    }
+
+@app.delete("/api/device/{device_sn}/users")
+async def clear_device_users(device_sn: str):
+    """Clear users for specific device"""
+    global USER_MAPPINGS
+    
+    # Try to find device by both original and display SN
+    display_sn = device_sn
+    if device_sn.startswith('B') and len(device_sn) > 12:
+        display_sn = device_sn[1:]
+    
+    if display_sn in USER_MAPPINGS:
+        count = len(USER_MAPPINGS[display_sn])
+        del USER_MAPPINGS[display_sn]
+        save_persistent_data()
+        log(f"🧹 Cleared {count} users for device {display_sn}")
+        
+        return {
+            "status": "success",
+            "device_sn": display_sn,
+            "count": count,
+            "message": f"Cleared {count} users for device {display_sn}"
+        }
+    
+    raise HTTPException(status_code=404, detail="No users found for this device")
+
+@app.delete("/api/users/clear")
+async def clear_all_users():
+    """Clear all user mappings"""
+    global USER_MAPPINGS
+    
+    total_count = 0
+    for device_sn, users in USER_MAPPINGS.items():
+        total_count += len(users)
+    
+    USER_MAPPINGS = {}
+    save_persistent_data()
+    log(f"🧹 Cleared all user mappings ({total_count} users)")
+    
+    return {
+        "status": "success",
+        "count": total_count,
+        "message": f"Cleared all user mappings ({total_count} users)"
+    }
+
+@app.get("/api/users/export")
+async def export_users():
+    """Export all users as CSV"""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header
+    writer.writerow(["Device SN", "Device Name", "UID", "User ID", "Name", "Privilege", "Group ID", "Last Updated"])
+    
+    # Write data
+    for device_sn, users in USER_MAPPINGS.items():
+        device_name = "Unknown Device"
+        for device in DEVICES:
+            if device.get('sn') == device_sn:
+                device_name = device.get('device_name', f"Device {device_sn}")
+                break
+        
+        for uid, user_info in users.items():
+            writer.writerow([
+                device_sn,
+                device_name,
+                uid,
+                user_info.get('user_id', ''),
+                user_info.get('name', 'Unknown'),
+                user_info.get('privilege', 'User'),
+                user_info.get('group_id', ''),
+                user_info.get('last_updated', '')
+            ])
+    
+    content = output.getvalue()
+    filename = f"users_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+    
+    return PlainTextResponse(
+        content,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}",
+            "Content-Type": "text/csv"
+        }
+    )
 
 # ---------------- DEVICE ENDPOINTS ----------------
 

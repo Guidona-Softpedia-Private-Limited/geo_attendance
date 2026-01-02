@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>eSSL Multi-Device Monitor</title>
+    <title>eSSL Multi-Device Monitor with User Mapping</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -136,6 +136,39 @@
             font-weight: bold;
             color: #1e40af;
         }
+        .user-table-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .privilege-admin {
+            background: #dc2626;
+            color: white;
+        }
+        .privilege-user {
+            background: #059669;
+            color: white;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+        }
+        .modal-container {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 12px;
+            z-index: 1001;
+            max-width: 90%;
+            max-height: 90%;
+            overflow: auto;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -143,12 +176,12 @@
         <!-- Header -->
         <header class="mb-8">
             <h1 class="text-3xl font-bold text-gray-800 mb-2">
-                <i class="fas fa-satellite-dish mr-3 text-blue-600"></i>
-                eSSL Multi-Device Monitor
+                <i class="fas fa-users-cog mr-3 text-blue-600"></i>
+                eSSL Multi-Device Monitor with User Mapping
             </h1>
-            <p class="text-gray-600 mb-6">Real-time monitoring for multiple biometric devices - Full Attendance Logs</p>
+            <p class="text-gray-600 mb-6">Real-time monitoring for multiple biometric devices with UID-Name mapping</p>
             
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
                     <div class="text-2xl font-bold text-blue-600">{{ devices|length }}</div>
                     <div class="text-sm text-gray-600">Devices Detected</div>
@@ -165,6 +198,10 @@
                     <div class="text-2xl font-bold text-orange-600">{{ total_data_size }}</div>
                     <div class="text-sm text-gray-600">Data Received</div>
                 </div>
+                <div class="bg-white p-4 rounded-lg shadow border border-gray-200">
+                    <div class="text-2xl font-bold text-indigo-600">{{ total_users }}</div>
+                    <div class="text-sm text-gray-600">Users Mapped</div>
+                </div>
             </div>
         </header>
 
@@ -179,11 +216,15 @@
                     <div class="text-sm text-gray-600 mt-1">
                         <span class="text-green-600"><i class="fas fa-circle text-xs mr-1"></i>{{ online_devices }} online</span>
                         <span class="ml-4 text-gray-500"><i class="fas fa-clock mr-1"></i>Updated: {{ last_update_time }}</span>
+                        <span class="ml-4 text-indigo-500"><i class="fas fa-users mr-1"></i>{{ total_users }} users mapped</span>
                     </div>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="rescanDevices()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
                         <i class="fas fa-sync-alt mr-2"></i>Rescan Devices
+                    </button>
+                    <button onclick="showImportUsersModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
+                        <i class="fas fa-file-import mr-2"></i>Import Users
                     </button>
                     <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors">
                         <i class="fas fa-broadcast-tower mr-2"></i>Get ALL Attendance
@@ -222,15 +263,22 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div class="grid grid-cols-3 gap-4 mb-4">
                         <div class="bg-gray-50 p-3 rounded">
                             <div class="text-xs text-gray-500 mb-1">Records</div>
                             <div class="text-lg font-bold text-blue-600">{{ device.records_count }}</div>
                         </div>
                         <div class="bg-gray-50 p-3 rounded">
+                            <div class="text-xs text-gray-500 mb-1">Users</div>
+                            <div class="text-lg font-bold text-indigo-600">{{ device.user_count or 0 }}</div>
+                        </div>
+                        <div class="bg-gray-50 p-3 rounded">
                             <div class="text-xs text-gray-500 mb-1">Communications</div>
                             <div class="text-lg font-bold text-purple-600">{{ device.comms_count }}</div>
                         </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-4">
                         <div class="bg-gray-50 p-3 rounded">
                             <div class="text-xs text-gray-500 mb-1">IP Address</div>
                             <div class="text-lg font-bold text-gray-800">{{ device.ip_address }}</div>
@@ -241,18 +289,22 @@
                         </div>
                     </div>
 
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                         <button onclick="sendDeviceCommand('{{ device.sn }}', 'GET ATTLOG ALL')" 
                                 class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
                             <i class="fas fa-download mr-2"></i>Get ALL Data
                         </button>
+                        <button onclick="sendDeviceCommand('{{ device.sn }}', 'GET USERINFO ALL')" 
+                                class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
+                            <i class="fas fa-users mr-2"></i>Get Users
+                        </button>
+                        <button onclick="viewDeviceUsers('{{ device.sn }}')" 
+                                class="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
+                            <i class="fas fa-list mr-2"></i>View Users
+                        </button>
                         <button onclick="viewDeviceDetails('{{ device.sn }}')" 
                                 class="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
                             <i class="fas fa-info-circle mr-2"></i>Details
-                        </button>
-                        <button onclick="viewDeviceRawData('{{ device.sn }}')" 
-                                class="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
-                            <i class="fas fa-code mr-2"></i>Raw Data
                         </button>
                     </div>
                 </div>
@@ -274,16 +326,123 @@
             </div>
         </div>
 
+        <!-- USER MAPPING SECTION -->
+        <div class="card mb-6">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800">
+                        <i class="fas fa-users mr-2 text-indigo-600"></i>
+                        User Mapping Status
+                    </h2>
+                    <div class="text-sm text-gray-600 mt-1">UID-Name mapping across all devices</div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="fetchAllUsers()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh Users
+                    </button>
+                    <button onclick="exportUsers()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                        <i class="fas fa-file-export mr-2"></i>Export CSV
+                    </button>
+                    <button onclick="clearAllUsers()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center">
+                        <i class="fas fa-trash mr-2"></i>Clear All
+                    </button>
+                </div>
+            </div>
+
+            {% if user_stats %}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {% for stat in user_stats %}
+                <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <div class="text-sm font-medium text-indigo-700">{{ stat.device_name }}</div>
+                            <div class="text-xs text-indigo-600 device-serial">{{ stat.device_sn }}</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-2xl font-bold text-indigo-600">{{ stat.user_count }}</div>
+                            <div class="text-xs text-indigo-500">users</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex gap-2">
+                        <button onclick="viewDeviceUsers('{{ stat.device_sn }}')" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-2 py-1 rounded text-xs">
+                            View
+                        </button>
+                        <button onclick="fetchDeviceUsers('{{ stat.device_sn }}')" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs">
+                            Fetch
+                        </button>
+                        <button onclick="clearDeviceUsers('{{ stat.device_sn }}')" class="flex-1 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center mb-6">
+                <i class="fas fa-users-slash text-3xl text-yellow-500 mb-3"></i>
+                <h3 class="font-medium text-yellow-800 mb-2">No User Mappings Yet</h3>
+                <p class="text-yellow-600 text-sm mb-4">Import user data from your ZK device scripts or fetch directly from devices</p>
+                <div class="flex gap-2 justify-center">
+                    <button onclick="showImportUsersModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg">
+                        Import Users
+                    </button>
+                    <button onclick="sendCommandToAll('GET USERINFO ALL')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                        Fetch From Devices
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- User Statistics -->
+            <div class="mt-6">
+                <h3 class="text-lg font-bold text-gray-800 mb-4">How User Mapping Works</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                                <i class="fas fa-code text-blue-600"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-blue-800">1. Run ZK Script</h4>
+                            </div>
+                        </div>
+                        <p class="text-sm text-blue-700">Run your ZK device Python script to extract user data</p>
+                    </div>
+                    <div class="bg-indigo-50 p-4 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center mr-3">
+                                <i class="fas fa-file-import text-indigo-600"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-indigo-800">2. Import Users</h4>
+                            </div>
+                        </div>
+                        <p class="text-sm text-indigo-700">Import the JSON output into this system</p>
+                    </div>
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <div class="flex items-center mb-3">
+                            <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+                                <i class="fas fa-check-circle text-green-600"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-green-800">3. Automatic Mapping</h4>
+                            </div>
+                        </div>
+                        <p class="text-sm text-green-700">Attendance records will automatically show user names</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- ATTENDANCE RECORDS -->
-        <div class="card mt-6">
+        <div class="card mb-6">
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h2 class="text-xl font-bold text-gray-800">
                         <i class="fas fa-history mr-2 text-purple-600"></i>
                         Recent Attendance Records
                     </h2>
-                    <div class="text-sm text-gray-600 mt-1">Latest 50 records from all devices • Check-out entries in red</div>
+                    <div class="text-sm text-gray-600 mt-1">Latest 50 records from all devices with user names</div>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="refreshAttendance()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center">
@@ -301,6 +460,7 @@
                         <tr>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Name</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -343,6 +503,18 @@
                                     <div class="text-sm font-bold text-gray-900">{{ record.user_id }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
+                                    <div class="text-sm font-medium text-gray-900">
+                                        {% if record.user_name and record.user_name != 'Unknown' %}
+                                            {{ record.user_name }}
+                                            {% if record.user_info and record.user_info.privilege == 'Admin' %}
+                                                <span class="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Admin</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-gray-400 italic">Not mapped</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap">
                                     <div class="text-sm text-gray-900 font-medium">{{ record.display_date }}</div>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap">
@@ -376,7 +548,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="8" class="px-6 py-12 text-center text-gray-500">
+                                <td colspan="9" class="px-6 py-12 text-center text-gray-500">
                                     <i class="fas fa-inbox text-4xl mb-4 text-gray-400"></i>
                                     <p class="font-medium text-lg mb-2">No attendance records yet</p>
                                     <p class="text-sm mb-4">Fetch ALL data from devices using Quick Actions</p>
@@ -395,6 +567,11 @@
                 <div class="flex justify-between items-center">
                     <div class="text-sm text-gray-600">
                         Showing <span class="font-bold">{{ recent_attendance|length }}</span> of <span class="font-bold">{{ total_records }}</span> total records
+                        <span class="ml-4 text-indigo-600">
+                            <i class="fas fa-user-check mr-1"></i>
+                            {% set mapped_count = recent_attendance|selectattr('user_name', '!=', 'Unknown')|list|length %}
+                            {{ mapped_count }}/{{ recent_attendance|length }} records have user names
+                        </span>
                     </div>
                     <div class="flex gap-2 text-xs">
                         <span class="flex items-center"><span class="inline-block w-3 h-3 bg-green-600 rounded mr-1"></span> Check-in</span>
@@ -406,8 +583,6 @@
             </div>
             {% endif %}
         </div>
-
-
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- RAW DATA MONITOR -->
@@ -495,6 +670,11 @@
                         <i class="fas fa-download"></i>
                     </button>
                     
+                    <button onclick="fetchAllUsersFromDevices()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get ALL User Data</span>
+                        <i class="fas fa-users"></i>
+                    </button>
+                    
                     <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
                         <span>Get ALL Attendance Logs</span>
                         <i class="fas fa-history"></i>
@@ -503,11 +683,6 @@
                     <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
                         <span>Get All Device Info</span>
                         <i class="fas fa-info-circle"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Reboot All Devices</span>
-                        <i class="fas fa-power-off"></i>
                     </button>
                     
                     <div class="mt-6 p-4 bg-gray-50 rounded-lg">
@@ -520,8 +695,9 @@
                             </button>
                         </div>
                         <div class="mt-2 text-xs text-gray-500">
-                            <p>Common Commands:</p>
-                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
+                            <p>User Commands:</p>
+                            <p class="font-mono text-xs mt-1">GET USERINFO ALL - Get ALL user data</p>
+                            <p class="font-mono text-xs">GET ATTLOG ALL - Get ALL attendance logs</p>
                             <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
                             <p class="font-mono text-xs">GET OPTION - Get device settings</p>
                             <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
@@ -531,8 +707,6 @@
                 </div>
             </div>
         </div>
-
-       
 
         <!-- SYSTEM LOGS -->
         <div class="card mt-6">
@@ -568,36 +742,37 @@
             
             <div class="mt-4 text-xs text-gray-500">
                 <p>Listening on: <span class="font-mono text-blue-400">{{ server_url }}</span></p>
-                <p class="mt-1">Endpoint: <span class="font-mono">/iclock/cdata.aspx</span> • Commands: <span class="font-mono">GET ATTLOG ALL</span></p>
+                <p class="mt-1">Endpoint: <span class="font-mono">/iclock/cdata.aspx</span> • User Command: <span class="font-mono">GET USERINFO ALL</span></p>
             </div>
         </div>
 
         <!-- Footer -->
         <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>eSSL Multi-Device Monitor • v2.3 • Full Device Serial Support</p>
+            <p>eSSL Multi-Device Monitor with User Mapping • v3.0 • Full UID-Name Mapping Support</p>
             <p class="mt-1 text-xs">
                 <span class="text-green-600">●</span> Active Devices: {{ online_devices }} | 
                 <span class="text-blue-600">●</span> Total Communications: {{ total_comms }} | 
                 <span class="text-purple-600">●</span> Total Records: {{ total_records }} |
+                <span class="text-indigo-600">●</span> Users Mapped: {{ total_users }} |
                 Last update: <span id="lastUpdateTime">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span>
             </p>
         </footer>
     </div>
 
     <!-- Raw Data Modal -->
-    <div id="rawDataModal" class="fixed inset-0 bg-gray-900 bg-opacity-75 hidden z-50 flex items-center justify-center p-4">
-        <div class="bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] flex flex-col">
-            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-                <h3 class="text-lg font-bold text-white" id="modalTitle">Raw Data</h3>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white">
+    <div id="rawDataModal" class="modal-overlay hidden">
+        <div class="modal-container w-full max-w-4xl">
+            <div class="p-4 border-b border-gray-300 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800" id="modalTitle">Raw Data</h3>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600">
                     <i class="fas fa-times text-xl"></i>
                 </button>
             </div>
-            <div class="p-4 overflow-auto flex-1">
+            <div class="p-4 overflow-auto max-h-[60vh]">
                 <div class="raw-data-container" id="modalRawData"></div>
             </div>
-            <div class="p-4 border-t border-gray-700 flex justify-between">
-                <div class="text-sm text-gray-400" id="modalStats"></div>
+            <div class="p-4 border-t border-gray-300 flex justify-between">
+                <div class="text-sm text-gray-600" id="modalStats"></div>
                 <div class="flex gap-2">
                     <button onclick="copyRawData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
                         <i class="fas fa-copy mr-2"></i>Copy to Clipboard
@@ -610,11 +785,115 @@
         </div>
     </div>
 
+    <!-- Users Modal -->
+    <div id="usersModal" class="modal-overlay hidden">
+        <div class="modal-container w-full max-w-6xl">
+            <div class="p-4 border-b border-gray-300 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800" id="usersModalTitle">Device Users</h3>
+                <button onclick="closeUsersModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4 overflow-auto max-h-[70vh]">
+                <div class="user-table-container">
+                    <table class="min-w-full divide-y divide-gray-200" id="usersTable">
+                        <!-- Will be populated by JavaScript -->
+                    </table>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-300 flex justify-between items-center">
+                <div class="text-sm text-gray-600" id="usersModalStats">0 users</div>
+                <div class="flex gap-2">
+                    <button onclick="exportUsersModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm">
+                        <i class="fas fa-download mr-2"></i>Export
+                    </button>
+                    <button onclick="closeUsersModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Users Modal -->
+    <div id="importUsersModal" class="modal-overlay hidden">
+        <div class="modal-container w-full max-w-2xl">
+            <div class="p-4 border-b border-gray-300 flex justify-between items-center">
+                <h3 class="text-lg font-bold text-gray-800">Import Users from ZK Device</h3>
+                <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="p-4">
+                <div class="mb-6">
+                    <h4 class="font-medium text-gray-700 mb-3">Step 1: Run ZK Device Script</h4>
+                    <div class="bg-gray-900 text-gray-300 font-mono text-sm rounded-lg p-4 mb-3">
+                        <pre>python zk_device_script.py</pre>
+                    </div>
+                    <p class="text-sm text-gray-600">Run your ZK device script to extract user data. The script should output JSON format.</p>
+                </div>
+
+                <div class="mb-6">
+                    <h4 class="font-medium text-gray-700 mb-3">Step 2: Paste JSON Output</h4>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Select Device:</label>
+                        <select id="importDeviceSelect" class="w-full p-2 border border-gray-300 rounded">
+                            <option value="">Select Device</option>
+                            {% for device in devices %}
+                            <option value="{{ device.sn }}">{{ device.device_name }} ({{ device.sn }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <textarea id="importUsersJson" placeholder='Paste JSON output here in format: {"users": [{"uid": "1", "name": "John Doe", "privilege": "Admin", ...}]}' 
+                             class="w-full h-64 p-3 border border-gray-300 rounded font-mono text-sm" spellcheck="false"></textarea>
+                    <p class="text-xs text-gray-500 mt-2">Example format from ZK device script output</p>
+                </div>
+
+                <div class="mb-4 p-4 bg-blue-50 rounded-lg">
+                    <h4 class="font-medium text-blue-800 mb-2">ZK Device Script Example Output:</h4>
+                    <div class="font-mono text-sm text-blue-700">
+                        <pre>{
+  "users": [
+    {
+      "uid": "1",
+      "name": "RAHUL SINGH YADAV",
+      "privilege": "Admin",
+      "password": "",
+      "group_id": "",
+      "user_id": "1"
+    },
+    {
+      "uid": "2",
+      "name": "Prakash Kumar Singh",
+      "privilege": "User",
+      "password": "",
+      "group_id": "",
+      "user_id": "2"
+    }
+  ]
+}</pre>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t border-gray-300 flex justify-between">
+                <div class="text-sm text-gray-600" id="importStatus">Ready to import</div>
+                <div class="flex gap-2">
+                    <button onclick="importUsers()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded text-sm">
+                        <i class="fas fa-upload mr-2"></i>Import Users
+                    </button>
+                    <button onclick="closeImportModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Global variables
         let currentDataView = 'hex';
         let currentDeviceFilter = 'all';
-        let dataRateHistory = [];
+        let currentUsersDevice = null;
 
         // Set data view mode
         function setDataView(mode) {
@@ -718,23 +997,11 @@
                 });
                 
                 if (!response.ok) {
-                    // Try broadcast instead
-                    const broadcastResponse = await fetch('/api/command/broadcast', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: `command=${encodeURIComponent(command)}`
-                    });
-                    
-                    if (!broadcastResponse.ok) {
-                        throw new Error('Failed to send command');
-                    }
-                    
-                    const result = await broadcastResponse.json();
-                    showNotification(`Command broadcasted to ${result.devices_count} devices`, 'success');
-                } else {
-                    const result = await response.json();
-                    showNotification(`Command queued: ${result.command}`, 'success');
+                    throw new Error('Failed to send command');
                 }
+                
+                const result = await response.json();
+                showNotification(`Command queued: ${result.command}`, 'success');
                 
                 document.getElementById('manualCommand').value = '';
                 
@@ -798,6 +1065,258 @@
             }
         }
 
+        // View device users
+        async function viewDeviceUsers(deviceSn) {
+            try {
+                const response = await fetch(`/api/device/${deviceSn}/users`);
+                if (!response.ok) {
+                    throw new Error(`No users found for device: ${deviceSn}`);
+                }
+                
+                const data = await response.json();
+                currentUsersDevice = deviceSn;
+                
+                const modal = document.getElementById('usersModal');
+                const modalTitle = document.getElementById('usersModalTitle');
+                const modalStats = document.getElementById('usersModalStats');
+                const usersTable = document.getElementById('usersTable');
+                
+                modalTitle.textContent = `Users for Device: ${deviceSn}`;
+                modalStats.textContent = `${data.count} users`;
+                
+                // Build table
+                let tableHtml = `
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Privilege</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Group ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                `;
+                
+                data.users.forEach(user => {
+                    tableHtml += `
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">${user.uid}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${user.user_id || 'N/A'}</td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">${user.name}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 py-1 text-xs rounded-full ${user.privilege === 'Admin' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">
+                                    ${user.privilege}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${user.group_id || 'N/A'}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${new Date(user.last_updated).toLocaleString()}</td>
+                        </tr>
+                    `;
+                });
+                
+                tableHtml += `</tbody>`;
+                usersTable.innerHTML = tableHtml;
+                modal.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Error loading device users:', error);
+                showNotification(`Error loading device users: ${error.message}`, 'error');
+            }
+        }
+
+        // Fetch users from device
+        async function fetchDeviceUsers(deviceSn) {
+            try {
+                showNotification(`Fetching users from ${deviceSn}...`, 'info');
+                
+                const response = await fetch(`/api/device/${deviceSn}/users/fetch`, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch users: HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(result.message, 'success');
+                
+            } catch (error) {
+                console.error('Error fetching device users:', error);
+                showNotification(`Error fetching device users: ${error.message}`, 'error');
+            }
+        }
+
+        // Fetch all users from all devices
+        async function fetchAllUsersFromDevices() {
+            if (!confirm('Fetch user data from ALL devices? This will send GET USERINFO ALL command to each device.')) return;
+            
+            try {
+                showNotification('Fetching user data from all devices...', 'info');
+                
+                const response = await sendCommandToAll('GET USERINFO ALL');
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Error fetching all users:', error);
+                showNotification(`Error fetching all users: ${error.message}`, 'error');
+            }
+        }
+
+        // Clear device users
+        async function clearDeviceUsers(deviceSn) {
+            if (!confirm(`Clear all users for device ${deviceSn}? This action cannot be undone.`)) return;
+            
+            try {
+                const response = await fetch(`/api/device/${deviceSn}/users`, {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to clear users: HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(result.message, 'success');
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error clearing device users:', error);
+                showNotification(`Error clearing device users: ${error.message}`, 'error');
+            }
+        }
+
+        // Clear all users
+        async function clearAllUsers() {
+            if (!confirm('Clear ALL user mappings for ALL devices? This action cannot be undone.')) return;
+            
+            try {
+                const response = await fetch('/api/users/clear', {
+                    method: 'DELETE',
+                    headers: { 'Accept': 'application/json' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to clear users: HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(result.message, 'success');
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error clearing all users:', error);
+                showNotification(`Error clearing all users: ${error.message}`, 'error');
+            }
+        }
+
+        // Import users
+        async function importUsers() {
+            const deviceSn = document.getElementById('importDeviceSelect').value;
+            const jsonText = document.getElementById('importUsersJson').value.trim();
+            
+            if (!deviceSn) {
+                showNotification('Please select a device', 'warning');
+                return;
+            }
+            
+            if (!jsonText) {
+                showNotification('Please paste JSON data', 'warning');
+                return;
+            }
+            
+            try {
+                const jsonData = JSON.parse(jsonText);
+                
+                const response = await fetch(`/api/device/${deviceSn}/users/import`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify(jsonData)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Import failed: HTTP ${response.status}`);
+                }
+                
+                const result = await response.json();
+                showNotification(result.message, 'success');
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Error importing users:', error);
+                showNotification(`Error importing users: ${error.message}`, 'error');
+            }
+        }
+
+        // Export users from modal
+        async function exportUsersModal() {
+            if (!currentUsersDevice) return;
+            
+            try {
+                const response = await fetch(`/api/device/${currentUsersDevice}/users`);
+                if (!response.ok) {
+                    throw new Error(`Failed to get users: HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Convert to CSV
+                const headers = ['UID', 'User ID', 'Name', 'Privilege', 'Group ID', 'Last Updated'];
+                const csvRows = [];
+                
+                csvRows.push(headers.join(','));
+                
+                data.users.forEach(user => {
+                    const row = [
+                        user.uid,
+                        user.user_id || '',
+                        `"${user.name.replace(/"/g, '""')}"`,
+                        user.privilege,
+                        user.group_id || '',
+                        user.last_updated
+                    ];
+                    csvRows.push(row.join(','));
+                });
+                
+                const csvContent = csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `users_${currentUsersDevice}_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('Users exported to CSV', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting users:', error);
+                showNotification(`Error exporting users: ${error.message}`, 'error');
+            }
+        }
+
         // View device raw data
         async function viewDeviceRawData(deviceSn) {
             try {
@@ -843,7 +1362,7 @@
                 
                 let title = 'Attendance Record Raw Data';
                 if (data.record) {
-                    title = `Record: ${data.record.user_id} @ ${data.record.timestamp}`;
+                    title = `Record: ${data.record.user_id} (${data.record.user_name}) @ ${data.record.timestamp}`;
                 }
                 
                 modalTitle.textContent = title;
@@ -866,9 +1385,23 @@
             }
         }
 
-        // Close modal
+        // Close modals
         function closeModal() {
             document.getElementById('rawDataModal').classList.add('hidden');
+        }
+
+        function closeUsersModal() {
+            document.getElementById('usersModal').classList.add('hidden');
+            currentUsersDevice = null;
+        }
+
+        function closeImportModal() {
+            document.getElementById('importUsersModal').classList.add('hidden');
+        }
+
+        // Show import modal
+        function showImportUsersModal() {
+            document.getElementById('importUsersModal').classList.remove('hidden');
         }
 
         // Copy raw data to clipboard
@@ -1052,7 +1585,7 @@
                 if (!data || data.length === 0) {
                     table.innerHTML = `
                         <tr>
-                            <td colspan="8" class="px-6 py-12 text-center text-gray-500">
+                            <td colspan="9" class="px-6 py-12 text-center text-gray-500">
                                 <i class="fas fa-inbox text-4xl mb-4 text-gray-400"></i>
                                 <p class="font-medium text-lg mb-2">No attendance records yet</p>
                                 <p class="text-sm mb-4">Fetch ALL data from devices using Quick Actions</p>
@@ -1078,6 +1611,17 @@
                         statusBadge = '<span class="status-badge status-breakin">Break-in</span>';
                     } else {
                         statusBadge = `<span class="status-badge status-other">${record.status_text || 'Unknown'}</span>`;
+                    }
+                    
+                    let userNameHtml = '';
+                    if (record.user_name && record.user_name !== 'Unknown') {
+                        userNameHtml = `
+                            ${record.user_name}
+                            ${record.user_info && record.user_info.privilege === 'Admin' ? 
+                                '<span class="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">Admin</span>' : ''}
+                        `;
+                    } else {
+                        userNameHtml = '<span class="text-gray-400 italic">Not mapped</span>';
                     }
                     
                     html += `
@@ -1106,6 +1650,11 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm font-bold text-gray-900">${record.user_id || 'N/A'}</div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <div class="text-sm font-medium text-gray-900">
+                                    ${userNameHtml}
+                                </div>
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <div class="text-sm text-gray-900 font-medium">${record.display_date || 'N/A'}</div>
@@ -1163,6 +1712,52 @@
             } catch (error) {
                 console.error('Error exporting attendance:', error);
                 showNotification(`Error exporting attendance: ${error.message}`, 'error');
+            }
+        }
+
+        // Export all users to CSV
+        async function exportUsers() {
+            try {
+                const response = await fetch('/api/users/export');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                
+                showNotification('User data exported to CSV', 'success');
+                
+            } catch (error) {
+                console.error('Error exporting users:', error);
+                showNotification(`Error exporting users: ${error.message}`, 'error');
+            }
+        }
+
+        // Fetch all users
+        async function fetchAllUsers() {
+            try {
+                const response = await fetch('/api/users');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                showNotification(`Loaded ${data.count} users from ${data.devices} devices`, 'success');
+                
+                // You could display this in a modal or update the UI
+                console.log('All users:', data);
+                
+            } catch (error) {
+                console.error('Error fetching users:', error);
+                showNotification(`Error fetching users: ${error.message}`, 'error');
             }
         }
 
@@ -1335,9 +1930,16 @@
                     e.preventDefault();
                     fetchAllDevices();
                 }
+                // Ctrl+U to import users
+                if (e.ctrlKey && e.key === 'u') {
+                    e.preventDefault();
+                    showImportUsersModal();
+                }
                 // Esc to close modal
                 if (e.key === 'Escape') {
                     closeModal();
+                    closeUsersModal();
+                    closeImportModal();
                 }
             });
         });
