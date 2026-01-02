@@ -131,6 +131,36 @@
             background: #6b7280;
             color: white;
         }
+        .device-status-select {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #d1d5db;
+            background: white;
+            cursor: pointer;
+        }
+        .device-status-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .status-update-btn {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .status-update-btn:hover {
+            background: #2563eb;
+        }
+        .status-update-btn:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -237,6 +267,32 @@
                         </div>
                     </div>
 
+                    <!-- DEVICE STATUS SETTING OPTION -->
+                    <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="text-sm font-medium text-gray-700">Device Status Setting:</div>
+                            <div class="text-xs text-gray-500" id="deviceStatusNote-{{ device.sn }}">Default: Check-in</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <select class="device-status-select flex-1" id="deviceStatusSelect-{{ device.sn }}">
+                                <option value="0">Check-in (Default)</option>
+                                <option value="1">Check-out</option>
+                                <option value="2">Break-out</option>
+                                <option value="3">Break-in</option>
+                                <option value="4">Overtime-in</option>
+                                <option value="5">Overtime-out</option>
+                                <option value="8">Manual Check-in</option>
+                                <option value="9">Manual Check-out</option>
+                            </select>
+                            <button onclick="updateDeviceStatus('{{ device.sn }}')" class="status-update-btn" id="statusUpdateBtn-{{ device.sn }}">
+                                Update
+                            </button>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <p>This setting will be used for all attendance records from this device</p>
+                        </div>
+                    </div>
+
                     <div class="flex gap-2">
                         <button onclick="sendDeviceCommand('{{ device.sn }}', 'GET ATTLOG ALL')" 
                                 class="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm flex items-center justify-center">
@@ -270,138 +326,15 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- RAW DATA MONITOR -->
-            <div class="card lg:col-span-2">
-                <div class="flex justify-between items-center mb-6">
-                    <div>
-                        <h2 class="text-xl font-bold text-gray-800">
-                            <i class="fas fa-code mr-2 text-green-600"></i>
-                            Raw Data Monitor
-                        </h2>
-                        <div class="text-sm text-gray-600 mt-1">Complete raw body from device communications</div>
-                    </div>
-                    <div class="flex gap-2">
-                        <div class="flex bg-gray-100 rounded-lg p-1">
-                            <button onclick="setDataView('hex')" id="hexTab" class="tab-button active">Hex</button>
-                            <button onclick="setDataView('ascii')" id="asciiTab" class="tab-button">ASCII</button>
-                            <button onclick="setDataView('raw')" id="rawTab" class="tab-button">Raw</button>
-                        </div>
-                        <button onclick="clearRawData()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
-                            <i class="fas fa-trash mr-2"></i>Clear
-                        </button>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <div class="flex justify-between text-sm text-gray-600 mb-2">
-                        <span id="currentDevice">All Devices</span>
-                        <span id="dataStats">0 bytes, 0 lines</span>
-                    </div>
-                    <div class="raw-data-container" id="rawDataContainer">
-                        {% if recent_raw_data %}
-                            {% for data in recent_raw_data %}
-                            <div class="data-line">
-                                <div class="text-xs text-gray-500 mb-1">
-                                    [{{ data.timestamp }}] {{ data.device_sn }} ({{ data.length }} bytes)
-                                </div>
-                                <div class="hex-view">
-                                    {{ data.hex_preview }}
-                                </div>
-                                <div class="ascii-view mt-1">
-                                    {{ data.ascii_preview }}
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                            <div class="text-gray-500 text-center py-8">
-                                <i class="fas fa-database text-3xl mb-3"></i>
-                                <p>No raw data received yet</p>
-                                <p class="text-sm mt-1">Waiting for device communications...</p>
-                            </div>
-                        {% endif %}
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-4 gap-4 text-center">
-                    <div class="bg-blue-50 p-3 rounded">
-                        <div class="text-lg font-bold text-blue-600" id="totalBytes">{{ total_data_bytes }}</div>
-                        <div class="text-xs text-blue-500">Total Bytes</div>
-                    </div>
-                    <div class="bg-green-50 p-3 rounded">
-                        <div class="text-lg font-bold text-green-600" id="totalComms">{{ total_comms }}</div>
-                        <div class="text-xs text-green-500">Communications</div>
-                    </div>
-                    <div class="bg-purple-50 p-3 rounded">
-                        <div class="text-lg font-bold text-purple-600" id="lastComms">0</div>
-                        <div class="text-xs text-purple-500">Last 5 min</div>
-                    </div>
-                    <div class="bg-orange-50 p-3 rounded">
-                        <div class="text-lg font-bold text-orange-600" id="dataRate">0/s</div>
-                        <div class="text-xs text-orange-500">Data Rate</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- QUICK ACTIONS -->
-            <div class="card">
-                <h2 class="text-xl font-bold text-gray-800 mb-6">
-                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>
-                    Quick Actions
-                </h2>
-                
-                <div class="space-y-3">
-                    <button onclick="fetchAllDevices()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Fetch ALL Devices Data</span>
-                        <i class="fas fa-download"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Get ALL Attendance Logs</span>
-                        <i class="fas fa-history"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Get All Device Info</span>
-                        <i class="fas fa-info-circle"></i>
-                    </button>
-                    
-                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
-                        <span>Reboot All Devices</span>
-                        <i class="fas fa-power-off"></i>
-                    </button>
-                    
-                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-                        <h3 class="font-medium text-gray-700 mb-3">Manual Command</h3>
-                        <div class="flex gap-2">
-                            <input type="text" id="manualCommand" placeholder="e.g., GET ATTLOG ALL" 
-                                   class="flex-1 p-2 border border-gray-300 rounded text-sm" value="GET ATTLOG ALL">
-                            <button onclick="sendManualCommand()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                        <div class="mt-2 text-xs text-gray-500">
-                            <p>Common Commands:</p>
-                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
-                            <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
-                            <p class="font-mono text-xs">GET OPTION - Get device settings</p>
-                            <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
-                            <p class="font-mono text-xs">REBOOT - Restart device</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ATTENDANCE RECORDS -->
-        <div class="card mt-6">
+        <!-- RECENT ATTENDANCE RECORDS (Now moved up) -->
+        <div class="card mb-6">
             <div class="flex justify-between items-center mb-6">
                 <div>
                     <h2 class="text-xl font-bold text-gray-800">
                         <i class="fas fa-history mr-2 text-purple-600"></i>
                         Recent Attendance Records
                     </h2>
-                    <div class="text-sm text-gray-600 mt-1">Latest 50 records from all devices • Check-out entries in red</div>
+                    <div class="text-sm text-gray-600 mt-1">Latest 50 records from all devices</div>
                 </div>
                 <div class="flex gap-2">
                     <button onclick="refreshAttendance()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center">
@@ -525,6 +458,129 @@
             {% endif %}
         </div>
 
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- RAW DATA MONITOR (Now moved down) -->
+            <div class="card lg:col-span-2">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-gray-800">
+                            <i class="fas fa-code mr-2 text-green-600"></i>
+                            Raw Data Monitor
+                        </h2>
+                        <div class="text-sm text-gray-600 mt-1">Complete raw body from device communications</div>
+                    </div>
+                    <div class="flex gap-2">
+                        <div class="flex bg-gray-100 rounded-lg p-1">
+                            <button onclick="setDataView('hex')" id="hexTab" class="tab-button active">Hex</button>
+                            <button onclick="setDataView('ascii')" id="asciiTab" class="tab-button">ASCII</button>
+                            <button onclick="setDataView('raw')" id="rawTab" class="tab-button">Raw</button>
+                        </div>
+                        <button onclick="clearRawData()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                            <i class="fas fa-trash mr-2"></i>Clear
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span id="currentDevice">All Devices</span>
+                        <span id="dataStats">0 bytes, 0 lines</span>
+                    </div>
+                    <div class="raw-data-container" id="rawDataContainer">
+                        {% if recent_raw_data %}
+                            {% for data in recent_raw_data %}
+                            <div class="data-line">
+                                <div class="text-xs text-gray-500 mb-1">
+                                    [{{ data.timestamp }}] {{ data.device_sn }} ({{ data.length }} bytes)
+                                </div>
+                                <div class="hex-view">
+                                    {{ data.hex_preview }}
+                                </div>
+                                <div class="ascii-view mt-1">
+                                    {{ data.ascii_preview }}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-gray-500 text-center py-8">
+                                <i class="fas fa-database text-3xl mb-3"></i>
+                                <p>No raw data received yet</p>
+                                <p class="text-sm mt-1">Waiting for device communications...</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-4 gap-4 text-center">
+                    <div class="bg-blue-50 p-3 rounded">
+                        <div class="text-lg font-bold text-blue-600" id="totalBytes">{{ total_data_bytes }}</div>
+                        <div class="text-xs text-blue-500">Total Bytes</div>
+                    </div>
+                    <div class="bg-green-50 p-3 rounded">
+                        <div class="text-lg font-bold text-green-600" id="totalComms">{{ total_comms }}</div>
+                        <div class="text-xs text-green-500">Communications</div>
+                    </div>
+                    <div class="bg-purple-50 p-3 rounded">
+                        <div class="text-lg font-bold text-purple-600" id="lastComms">0</div>
+                        <div class="text-xs text-purple-500">Last 5 min</div>
+                    </div>
+                    <div class="bg-orange-50 p-3 rounded">
+                        <div class="text-lg font-bold text-orange-600" id="dataRate">0/s</div>
+                        <div class="text-xs text-orange-500">Data Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- QUICK ACTIONS -->
+            <div class="card">
+                <h2 class="text-xl font-bold text-gray-800 mb-6">
+                    <i class="fas fa-bolt mr-2 text-yellow-600"></i>
+                    Quick Actions
+                </h2>
+                
+                <div class="space-y-3">
+                    <button onclick="fetchAllDevices()" class="w-full bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Fetch ALL Devices Data</span>
+                        <i class="fas fa-download"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('GET ATTLOG ALL')" class="w-full bg-green-600 hover:bg-green-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get ALL Attendance Logs</span>
+                        <i class="fas fa-history"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('GET OPTION')" class="w-full bg-purple-600 hover:bg-purple-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Get All Device Info</span>
+                        <i class="fas fa-info-circle"></i>
+                    </button>
+                    
+                    <button onclick="sendCommandToAll('REBOOT')" class="w-full bg-red-600 hover:bg-red-700 text-white p-3 rounded-lg flex items-center justify-between transition-colors">
+                        <span>Reboot All Devices</span>
+                        <i class="fas fa-power-off"></i>
+                    </button>
+                    
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+                        <h3 class="font-medium text-gray-700 mb-3">Manual Command</h3>
+                        <div class="flex gap-2">
+                            <input type="text" id="manualCommand" placeholder="e.g., GET ATTLOG ALL" 
+                                   class="flex-1 p-2 border border-gray-300 rounded text-sm" value="GET ATTLOG ALL">
+                            <button onclick="sendManualCommand()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <p>Common Commands:</p>
+                            <p class="font-mono text-xs mt-1">GET ATTLOG ALL - Get ALL attendance logs</p>
+                            <p class="font-mono text-xs">GET ATTLOG - Get recent logs</p>
+                            <p class="font-mono text-xs">GET OPTION - Get device settings</p>
+                            <p class="font-mono text-xs">CLEAR DATA - Clear device data</p>
+                            <p class="font-mono text-xs">REBOOT - Restart device</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- SYSTEM LOGS -->
         <div class="card mt-6">
             <div class="flex justify-between items-center mb-4">
@@ -565,7 +621,7 @@
 
         <!-- Footer -->
         <footer class="mt-8 text-center text-gray-500 text-sm">
-            <p>eSSL Multi-Device Monitor • v2.2 • Full Attendance Logs Support</p>
+            <p>eSSL Multi-Device Monitor • v2.3 • Device Status Settings Support</p>
             <p class="mt-1 text-xs">
                 <span class="text-green-600">●</span> Active Devices: {{ online_devices }} | 
                 <span class="text-blue-600">●</span> Total Communications: {{ total_comms }} | 
@@ -606,6 +662,127 @@
         let currentDataView = 'hex';
         let currentDeviceFilter = 'all';
         let dataRateHistory = [];
+        let deviceStatusSettings = {};
+
+        // Load device status settings from localStorage
+        function loadDeviceStatusSettings() {
+            const savedSettings = localStorage.getItem('deviceStatusSettings');
+            if (savedSettings) {
+                deviceStatusSettings = JSON.parse(savedSettings);
+                
+                // Apply saved settings to UI
+                for (const [deviceSn, status] of Object.entries(deviceStatusSettings)) {
+                    const selectElement = document.getElementById(`deviceStatusSelect-${deviceSn}`);
+                    if (selectElement) {
+                        selectElement.value = status;
+                        updateStatusNote(deviceSn, status);
+                    }
+                }
+            }
+        }
+
+        // Save device status settings to localStorage
+        function saveDeviceStatusSettings() {
+            localStorage.setItem('deviceStatusSettings', JSON.stringify(deviceStatusSettings));
+        }
+
+        // Update status note for device
+        function updateStatusNote(deviceSn, status) {
+            const statusNote = document.getElementById(`deviceStatusNote-${deviceSn}`);
+            if (statusNote) {
+                const statusMap = {
+                    '0': 'Check-in',
+                    '1': 'Check-out', 
+                    '2': 'Break-out',
+                    '3': 'Break-in',
+                    '4': 'Overtime-in',
+                    '5': 'Overtime-out',
+                    '8': 'Manual Check-in',
+                    '9': 'Manual Check-out'
+                };
+                statusNote.textContent = `Current: ${statusMap[status] || 'Check-in'}`;
+            }
+        }
+
+        // Update device status setting
+        async function updateDeviceStatus(deviceSn) {
+            const selectElement = document.getElementById(`deviceStatusSelect-${deviceSn}`);
+            const buttonElement = document.getElementById(`statusUpdateBtn-${deviceSn}`);
+            
+            if (!selectElement || !buttonElement) {
+                showNotification('Device status element not found', 'error');
+                return;
+            }
+            
+            const status = selectElement.value;
+            
+            // Disable button during update
+            buttonElement.disabled = true;
+            buttonElement.textContent = 'Updating...';
+            
+            try {
+                // Save to localStorage
+                deviceStatusSettings[deviceSn] = status;
+                saveDeviceStatusSettings();
+                
+                // Update status note
+                updateStatusNote(deviceSn, status);
+                
+                // Send command to update device if online
+                const deviceStatus = await checkDeviceStatus(deviceSn);
+                if (deviceStatus === 'online') {
+                    // Send configuration command to device
+                    await sendDeviceCommand(deviceSn, `SET ATTLOGSTATUS ${status}`);
+                    
+                    showNotification(`Device ${deviceSn} status updated to ${getStatusText(status)}`, 'success');
+                    
+                    // Refresh attendance data to see the change
+                    setTimeout(() => {
+                        refreshAttendance();
+                    }, 2000);
+                } else {
+                    showNotification(`Device ${deviceSn} is offline. Setting saved locally.`, 'warning');
+                }
+                
+            } catch (error) {
+                console.error('Error updating device status:', error);
+                showNotification(`Error updating device status: ${error.message}`, 'error');
+            } finally {
+                // Re-enable button
+                buttonElement.disabled = false;
+                buttonElement.textContent = 'Update';
+            }
+        }
+
+        // Get status text from status code
+        function getStatusText(status) {
+            const statusMap = {
+                '0': 'Check-in',
+                '1': 'Check-out',
+                '2': 'Break-out',
+                '3': 'Break-in',
+                '4': 'Overtime-in',
+                '5': 'Overtime-out',
+                '8': 'Manual Check-in',
+                '9': 'Manual Check-out'
+            };
+            return statusMap[status] || 'Check-in';
+        }
+
+        // Check device status
+        async function checkDeviceStatus(deviceSn) {
+            try {
+                const response = await fetch(`/api/device/${deviceSn}`);
+                if (!response.ok) {
+                    return 'offline';
+                }
+                
+                const device = await response.json();
+                return device.last_seen_seconds < 300 ? 'online' : 'offline';
+            } catch (error) {
+                return 'offline';
+            }
+        }
 
         // Set data view mode
         function setDataView(mode) {
@@ -773,6 +950,12 @@
                 
                 if (Object.keys(device.params || {}).length === 0) {
                     details += `No parameters available\n`;
+                }
+                
+                // Add status setting if available
+                if (deviceStatusSettings[deviceSn]) {
+                    details += `\n=== STATUS SETTING ===\n\n`;
+                    details += `Default Status: ${getStatusText(deviceStatusSettings[deviceSn])} (${deviceStatusSettings[deviceSn]})\n`;
                 }
                 
                 modalTitle.textContent = `Device Details: ${device.sn}`;
@@ -1279,6 +1462,7 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             updateLastUpdateTime();
+            loadDeviceStatusSettings();
             
             // Auto-scroll logs to bottom
             const logPanel = document.getElementById('logPanel');

@@ -15,3 +15,6 @@ EXPOSE 9001
 
 # Run server
 CMD ["uvicorn", "biometric:app", "--host", "0.0.0.0", "--port", "9001"]
+
+
+
